@@ -678,6 +678,12 @@ const sanctum = (() => {
 
   const tick = (dt) => {
     magicBus.captured = state === "unlocked" && inView && magicBus.active && magicBus.handY != null;
+    if (state === "locked") {
+      // proximity fallback in case the observer is late (throttled tabs, odd browsers)
+      const r = sec.getBoundingClientRect();
+      if (r.top < window.innerHeight * 2) load();
+      return;
+    }
     if (state !== "unlocked") return;
     if (magicBus.captured) {
       // palm height conducts the film: lower the palm = fold back, raise = unfold
@@ -692,8 +698,12 @@ const sanctum = (() => {
     }
     cur = lerp(cur, target, 1 - Math.exp(-dt * 6));
     const i = Math.round(cur);
-    if (i !== drawn) { draw(i); drawn = i; }
+    if (i !== drawn) {
+      draw(i); drawn = i;
+      fillEl.style.transform = `scaleX(${(i / (S.count - 1)).toFixed(3)})`;
+    }
   };
+  const fillEl = $("#sanctum-fill");
 
   window.addEventListener("resize", () => { if (state === "unlocked") { resize(); drawn = -1; } });
   return { tick };

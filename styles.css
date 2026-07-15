@@ -305,12 +305,18 @@ body::after {
 
 /* ═══════════════ SHARED SECTION CHROME ═══════════════ */
 section { position: relative; z-index: 5; }
-#events, #blessings, #venue, #sanctum {
+#events, #blessings, #venue {
   padding: 72px 22px 64px;
   background:
     radial-gradient(140% 60% at 50% 0%, rgba(201,162,75,.10), transparent 55%),
     var(--ivory);
   overflow: hidden;                 /* decor bleeds are clipped, no sideways scroll */
+}
+#sanctum {
+  background:
+    radial-gradient(140% 60% at 50% 0%, rgba(201,162,75,.10), transparent 55%),
+    var(--ivory);
+  /* NO overflow:hidden here — it would break the sticky stage */
 }
 
 /* ═══════════════ DECOR CUTOUTS — parallax layers ═════════ */
@@ -354,8 +360,8 @@ section { position: relative; z-index: 5; }
 
 /* ═══════════════ SANCTUM — the hidden moment ═════════════ */
 #sanctum {
-  height: 300vh;                     /* scroll runway: the film scrubs as you pass through */
-  height: 300dvh;
+  height: 220vh;                     /* scroll runway: the film scrubs as you pass through */
+  height: 220dvh;
   padding: 0 22px !important;
 }
 #sanctum-stage {
@@ -369,9 +375,31 @@ section { position: relative; z-index: 5; }
 #sanctum-stage .sec-head { margin-bottom: 18px; }
 #sanctum-portal {
   position: relative;
-  width: min(84vw, 42dvh, 400px);   /* fits stage together with heading + magic button */
+  width: min(88vw, 50dvh, 440px);   /* fits stage together with heading + magic button */
   margin: 0 auto;
   aspect-ratio: 1025 / 1126;        /* arch cutout ratio */
+}
+#sanctum-filmbar {
+  width: min(60vw, 240px);
+  margin: 18px auto 0;
+  display: grid; gap: 7px; justify-items: center;
+}
+#sanctum-filmbar .bar {
+  width: 100%; height: 2px;
+  background: rgba(201,162,75,.25);
+  border-radius: 2px;
+  overflow: hidden;
+}
+#sanctum-filmbar .fill {
+  display: block; height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-soft));
+  transform-origin: left;
+  transform: scaleX(0);
+}
+#sanctum-filmbar .cap {
+  font-family: var(--serif-display);
+  font-size: 10px; letter-spacing: .26em; text-transform: uppercase;
+  color: var(--maroon); opacity: .65;
 }
 .sanctum-arch {
   position: absolute; inset: 0;
