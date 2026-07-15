@@ -30,6 +30,17 @@ body {
 img { max-width: 100%; }
 button { font-family: inherit; cursor: pointer; }
 
+/* Handmade-paper grain over everything — the single biggest "expensive" cue */
+body::after {
+  content: "";
+  position: fixed; inset: 0;
+  z-index: 66;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  opacity: .05;
+  mix-blend-mode: multiply;
+}
+
 /* ── Gold foil text ───────────────────────────────────────── */
 .gold-foil {
   background: linear-gradient(105deg,
@@ -149,6 +160,19 @@ button { font-family: inherit; cursor: pointer; }
   overflow: hidden;
 }
 #scrub { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* A slow beam of golden light drifting across the world */
+.hero-sticky::after {
+  content: "";
+  position: absolute; inset: -30%;
+  pointer-events: none;
+  background: radial-gradient(ellipse 34% 26% at 50% 50%, rgba(255,232,170,.5), transparent 70%);
+  mix-blend-mode: soft-light;
+  animation: light-drift 23s ease-in-out infinite alternate;
+}
+@keyframes light-drift {
+  from { transform: translate(-14%, -8%) scale(1); }
+  to   { transform: translate(14%, 10%) scale(1.25); }
+}
 .vignette {
   position: absolute; inset: -2px; pointer-events: none;
   /* feathers the floating world into the page ivory — no hard frame edges */
@@ -176,6 +200,20 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1.08;
   margin: 10px 0 6px;
   filter: drop-shadow(0 1px 2px rgba(74,15,34,.25));
+}
+/* Cinematic letter-cascade entrance for the names */
+.names .ltr {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(26px) rotate(4deg);
+  filter: blur(5px);
+}
+#hero.entered .names .ltr {
+  animation: ltr-in .9s cubic-bezier(.2,.75,.25,1) forwards;
+  animation-delay: calc(var(--li) * 65ms + .25s);
+}
+@keyframes ltr-in {
+  to { opacity: 1; transform: none; filter: blur(0); }
 }
 .amp { font-size: .6em; vertical-align: .18em; }
 .date-line {
@@ -235,6 +273,11 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 22px; font-weight: 700;
   color: var(--maroon);
   font-variant-numeric: tabular-nums;
+}
+.cd-num.tick { animation: num-roll .5s cubic-bezier(.2,.8,.3,1); }
+@keyframes num-roll {
+  0%   { transform: translateY(-.65em); opacity: 0; filter: blur(2px); }
+  100% { transform: translateY(0); opacity: 1; filter: blur(0); }
 }
 .cd-lbl {
   font-size: 10px; letter-spacing: .22em; text-transform: uppercase;
@@ -398,6 +441,11 @@ section { position: relative; z-index: 5; }
   58% { filter: brightness(.96) drop-shadow(0 0 8px rgba(229,200,120,.5)); }
 }
 .sec-head { text-align: center; margin-bottom: 40px; }
+.sec-head .eyebrow {
+  letter-spacing: .1em; opacity: 0;
+  transition: letter-spacing 1.4s cubic-bezier(.2,.7,.3,1), opacity 1.2s ease;
+}
+.sec-head.shown .eyebrow { letter-spacing: .34em; opacity: .95; }
 .sec-title {
   font-family: var(--serif-display);
   font-weight: 700;
@@ -405,6 +453,33 @@ section { position: relative; z-index: 5; }
   margin-top: 8px;
 }
 .sec-sub { margin-top: 8px; font-size: 17px; font-style: italic; opacity: .8; }
+/* Self-drawing gold flourish under section titles */
+.flourish { width: 150px; height: 26px; margin: 12px auto 0; display: block; overflow: visible; }
+.flourish path, .flourish circle {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+}
+.sec-head.shown .flourish path, .sec-head.shown .flourish circle {
+  transition: stroke-dashoffset 1.8s ease .3s;
+  stroke-dashoffset: 0;
+}
+.flourish .gem {
+  fill: var(--gold);
+  stroke: none;
+  opacity: 0;
+  transform-origin: center;
+  transform: scale(0) rotate(45deg);
+  transform-box: fill-box;
+}
+.sec-head.shown .flourish .gem {
+  transition: opacity .5s ease 1.4s, transform .7s cubic-bezier(.2,.9,.3,1.4) 1.4s;
+  opacity: 1;
+  transform: scale(1) rotate(45deg);
+}
 
 /* ═══════════════ EVENT CARDS ═══════════════ */
 #event-cards {
@@ -413,6 +488,7 @@ section { position: relative; z-index: 5; }
 }
 .event-card {
   --accent: var(--maroon);
+  --shx: 50%;
   position: relative;
   border-radius: 18px;
   padding: 24px 22px 22px 88px;
@@ -422,6 +498,17 @@ section { position: relative; z-index: 5; }
   opacity: 0; transform: translateY(46px) scale(.96);
   transition: opacity .8s cubic-bezier(.2,.7,.3,1), transform .8s cubic-bezier(.2,.7,.3,1);
   overflow: hidden;
+}
+/* Gold sheen that slides with device tilt / finger — holographic card feel */
+.event-card::after {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg,
+    transparent calc(var(--shx) - 24%),
+    rgba(246,231,182,.35) var(--shx),
+    transparent calc(var(--shx) + 24%));
+  transition: background .12s linear;
 }
 .event-card::before {
   content: "";
@@ -622,6 +709,34 @@ footer { text-align: center; margin-top: 64px; }
   background: #fff;
 }
 
+/* ═══════════════ GOLDEN SCROLL THREAD ════════════════════ */
+#thread {
+  position: fixed;
+  top: 0; right: calc(env(safe-area-inset-right, 0px) + 5px);
+  width: 2px; height: 100dvh;
+  z-index: 75;
+  pointer-events: none;
+  background: linear-gradient(rgba(201,162,75,.16), rgba(201,162,75,.16));
+  opacity: 0;
+  transition: opacity .8s ease;
+}
+#thread.on { opacity: 1; }
+#thread::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(var(--gold-soft), var(--gold));
+  transform-origin: top;
+  transform: scaleY(var(--sp, 0));
+}
+#thread-lotus {
+  position: absolute;
+  right: -7px;
+  top: calc(var(--sp, 0) * 100% - 8px);
+  font-size: 15px;
+  font-style: normal;
+  filter: drop-shadow(0 0 5px rgba(229,200,120,.8));
+}
+
 /* ═══════════════ SOUND TOGGLE ═══════════════ */
 #sound-toggle {
   position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 12px; z-index: 80;
@@ -647,4 +762,8 @@ footer { text-align: center; margin-top: 64px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition-duration: .01s !important; }
   .event-card { opacity: 1; transform: none; }
+  .names .ltr { opacity: 1 !important; transform: none !important; filter: none !important; }
+  .sec-head .eyebrow { opacity: .95; letter-spacing: .34em; }
+  .flourish path, .flourish circle { stroke-dashoffset: 0 !important; }
+  .flourish .gem { opacity: 1 !important; transform: scale(1) rotate(45deg) !important; }
 }

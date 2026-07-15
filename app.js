@@ -389,6 +389,13 @@ const parallax = (() => {
   const tgt = new Date(CFG.wedding.dateISO).getTime();
   const el = { d: $("#cd-d"), h: $("#cd-h"), m: $("#cd-m"), s: $("#cd-s") };
   const pad = (n) => String(n).padStart(2, "0");
+  const roll = (node, txt) => {
+    if (node.textContent === txt) return;
+    node.textContent = txt;
+    node.classList.remove("tick");
+    void node.offsetWidth;             // restart the roll animation
+    node.classList.add("tick");
+  };
   const upd = () => {
     let ms = tgt - Date.now();
     if (ms <= 0) {
@@ -396,10 +403,10 @@ const parallax = (() => {
       clearInterval(iv);
       return;
     }
-    el.d.textContent = pad(ms / 864e5 | 0);
-    el.h.textContent = pad((ms / 36e5 | 0) % 24);
-    el.m.textContent = pad((ms / 6e4 | 0) % 60);
-    el.s.textContent = pad((ms / 1e3 | 0) % 60);
+    roll(el.d, pad(ms / 864e5 | 0));
+    roll(el.h, pad((ms / 36e5 | 0) % 24));
+    roll(el.m, pad((ms / 6e4 | 0) % 60));
+    roll(el.s, pad((ms / 1e3 | 0) % 60));
   };
   const iv = setInterval(upd, 1000);
   upd();
@@ -790,6 +797,77 @@ const decor = (() => {
   });
 })();
 
+/* ═══════════════ FINISHING TOUCHES ═══════════════════════ */
+(() => {
+  /* Names → letter spans for the cascade entrance */
+  const names = $(".names");
+  if (names) {
+    names.setAttribute("aria-label", names.textContent.trim());
+    let li = 0;
+    const split = (node) => {
+      [...node.childNodes].forEach((n) => {
+        if (n.nodeType === 3) {
+          const frag = document.createDocumentFragment();
+          for (const ch of n.textContent) {
+            if (ch.trim() === "") { frag.appendChild(document.createTextNode(ch)); continue; }
+            const s = document.createElement("span");
+            s.className = "ltr";
+            s.style.setProperty("--li", li++);
+            s.textContent = ch;
+            s.setAttribute("aria-hidden", "true");
+            frag.appendChild(s);
+          }
+          node.replaceChild(frag, n);
+        } else if (n.nodeType === 1) { n.classList.add("ltr"); n.style.setProperty("--li", li++); }
+      });
+    };
+    split(names);
+  }
+
+  /* Self-drawing flourish under every section title */
+  const FLOURISH = `<svg class="flourish" viewBox="0 0 150 26" aria-hidden="true">
+    <path d="M5 13 C 30 13, 40 4, 62 12"/><path d="M145 13 C 120 13, 110 22, 88 14"/>
+    <circle cx="75" cy="13" r="7.5"/>
+    <rect class="gem" x="71" y="9" width="8" height="8"/>
+  </svg>`;
+  document.querySelectorAll(".sec-head").forEach((h) => {
+    h.insertAdjacentHTML("beforeend", FLOURISH);
+  });
+  const headIO = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("shown"); headIO.unobserve(e.target); } });
+  }, { threshold: 0.5 });
+  document.querySelectorAll(".sec-head").forEach((h) => headIO.observe(h));
+
+  /* Holographic tilt + sheen on event cards (touch/pointer driven) */
+  document.getElementById("event-cards").addEventListener("pointermove", (e) => {
+    const card = e.target.closest(".event-card");
+    if (!card || REDUCED) return;
+    const r = card.getBoundingClientRect();
+    const fx = clamp((e.clientX - r.left) / r.width, 0, 1);
+    const fy = clamp((e.clientY - r.top) / r.height, 0, 1);
+    card.style.animationPlayState = "paused";
+    card.style.transform =
+      `perspective(700px) rotateY(${(fx - 0.5) * 7}deg) rotateX(${(0.5 - fy) * 6}deg) translateY(-2px)`;
+    card.style.setProperty("--shx", (fx * 100).toFixed(1) + "%");
+  }, { passive: true });
+  ["pointerleave", "pointerup", "pointercancel"].forEach((ev) =>
+    document.getElementById("event-cards").addEventListener(ev, (e) => {
+      const card = e.target.closest(".event-card");
+      if (!card) return;
+      card.style.transform = "";
+      card.style.animationPlayState = "";
+    }, { passive: true }));
+
+  /* Tap sparkle — a pinch of petals wherever a finger lands */
+  let lastSpark = 0;
+  document.addEventListener("pointerdown", (e) => {
+    const t = performance.now();
+    if (t - lastSpark < 450 || REDUCED) return;
+    lastSpark = t;
+    petals.burst(e.clientX, e.clientY, 3);
+  }, { passive: true });
+})();
+
 /* ═══════════════ MANDALA (loader SVG petals) ═════════════ */
 (() => {
   const ring = $("#petal-ring");
@@ -806,6 +884,7 @@ const decor = (() => {
 })();
 
 /* ═══════════════ MAIN LOOP + FPS GUARD ═══════════════════ */
+const threadEl = $("#thread");
 let lastT = performance.now(), fpsAcc = 0, fpsN = 0, degraded = false;
 const mainLoop = (t) => {
   const dt = Math.min((t - lastT) / 1000, 0.05);
@@ -815,6 +894,10 @@ const mainLoop = (t) => {
   petals.step(dt);
   sanctum.tick(dt);
   decor.tick(parallax.getTilt());
+  // golden scroll thread
+  const doc = document.documentElement;
+  const sp = clamp(scrollY / Math.max(doc.scrollHeight - innerHeight, 1), 0, 1);
+  threadEl.style.setProperty("--sp", sp.toFixed(4));
   // fps monitor
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 2 && !degraded) {
@@ -845,9 +928,14 @@ const mainLoop = (t) => {
     return;
   }
 
+  const ringPetals = [...document.querySelectorAll("#petal-ring path")];
+  ringPetals.forEach((p) => { p.style.opacity = .18; p.style.transition = "opacity .6s ease"; });
   frames.preloadLo((f) => {
     pctEl.textContent = Math.round(f * 100) + "%";
     ring.style.strokeDashoffset = CIRC * (1 - f);
+    // the mandala blooms petal by petal as the world loads
+    const lit = Math.round(f * ringPetals.length);
+    for (let k = 0; k < lit; k++) ringPetals[k].style.opacity = 1;
   }).then(() => {
     scrub.firstPaint();
     statusEl.classList.add("hidden");
@@ -860,10 +948,12 @@ const mainLoop = (t) => {
     audio.bell(432, 0.55, 4);
     parallax.enable();          // gyro permission inside the tap gesture
     loader.classList.add("open");
+    $("#hero").classList.add("entered");     // names cascade in as the doors part
     setTimeout(() => {
       loader.classList.add("gone");
       audio.startDrone();
       $("#sound-toggle").classList.remove("hidden");
+      $("#thread").classList.add("on");
       petals.start();
     }, 1500);
     frames.startHi();
