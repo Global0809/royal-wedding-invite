@@ -108,7 +108,7 @@ window.WEDDING_CONFIG = {
     ext: ".webp",
     heading: "The Hidden Moment",
     eyebrow: "For those who believe in magic",
-    hint: "Enable Magic Mode, then raise your palm slowly — a sacred moment will unfold in your hand",
-    veilText: "Awaiting your hand's blessing",
+    hint: "Scroll to unfold it — or enable Magic Mode and let your palm conduct it",
+    veilText: "A sacred moment awaits",
   },
 };

@@ -353,9 +353,23 @@ section { position: relative; z-index: 5; }
 #event-cards, .venue-card, #scratch-wrap, #magic-block, .rsvp-block, footer { position: relative; z-index: 2; }
 
 /* ═══════════════ SANCTUM — the hidden moment ═════════════ */
+#sanctum {
+  height: 300vh;                     /* scroll runway: the film scrubs as you pass through */
+  height: 300dvh;
+  padding: 0 22px !important;
+}
+#sanctum-stage {
+  position: sticky; top: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  justify-content: center;
+  padding: 20px 0;
+}
+#sanctum-stage .sec-head { margin-bottom: 18px; }
 #sanctum-portal {
   position: relative;
-  max-width: 420px;
+  width: min(84vw, 42dvh, 400px);   /* fits stage together with heading + magic button */
   margin: 0 auto;
   aspect-ratio: 1025 / 1126;        /* arch cutout ratio */
 }
@@ -587,9 +601,32 @@ section { position: relative; z-index: 5; }
   transition: opacity .9s ease;
 }
 #scratch-foil.cleared { opacity: 0; pointer-events: none; }
+/* Celebration when the secret is revealed */
+#scratch-wrap.celebrate {
+  animation: scratch-drama 1.8s cubic-bezier(.2,.8,.3,1);
+}
+@keyframes scratch-drama {
+  0%   { transform: scale(1); box-shadow: 0 14px 44px rgba(74,15,34,.22); }
+  18%  { transform: scale(1.045) rotate(.6deg); box-shadow: 0 0 60px rgba(229,200,120,.95), 0 14px 44px rgba(74,15,34,.3); }
+  38%  { transform: scale(.995) rotate(-.4deg); }
+  60%  { transform: scale(1.02); box-shadow: 0 0 34px rgba(229,200,120,.55); }
+  100% { transform: scale(1); box-shadow: 0 14px 44px rgba(74,15,34,.22); }
+}
+#scratch-wrap.celebrate::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,244,208,.9) 50%, transparent 70%);
+  background-size: 260% 100%;
+  animation: foil-flash 1.2s ease .15s both;
+  pointer-events: none;
+}
+@keyframes foil-flash {
+  from { background-position: 120% 0; opacity: 1; }
+  to   { background-position: -60% 0; opacity: 0; }
+}
 
 /* ═══════════════ MAGIC MODE ═══════════════ */
-#magic-block { text-align: center; margin-top: 52px; }
+#magic-block { text-align: center; margin-top: 26px; }
 #magic-toggle {
   display: inline-grid; justify-items: center; gap: 3px;
   padding: 16px 30px 14px;
@@ -606,17 +643,45 @@ section { position: relative; z-index: 5; }
 .magic-label { font-family: var(--serif-display); font-size: 15px; letter-spacing: .1em; text-transform: uppercase; }
 .magic-sub { font-size: 13.5px; font-style: italic; opacity: .8; }
 #magic-status { margin-top: 14px; font-size: 15px; font-style: italic; color: var(--maroon); }
-#magic-cam {
+/* Futuristic hand-tracking HUD */
+#magic-hud {
   position: fixed; right: 14px; bottom: 14px; z-index: 70;
-  width: 86px; height: 86px;
-  object-fit: cover;
-  border-radius: 50%;
-  border: 2px solid var(--gold);
-  box-shadow: 0 6px 22px rgba(0,0,0,.35);
-  transform: scaleX(-1);
+  width: 104px; height: 104px;
   display: none;
 }
-#magic-cam.live { display: block; }
+#magic-hud.live { display: block; }
+#magic-cam, #hud-canvas {
+  position: absolute; inset: 6px;
+  width: calc(100% - 12px); height: calc(100% - 12px);
+  object-fit: cover;
+  border-radius: 50%;
+  transform: scaleX(-1);
+}
+#hud-canvas { z-index: 2; }
+#magic-cam { filter: saturate(.4) brightness(.9) contrast(1.1); }
+.hud-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 40%, var(--gold-soft) 50%, transparent 60% 100%);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 64%);
+  mask: radial-gradient(circle, transparent 62%, #000 64%);
+  animation: hud-spin 2.6s linear infinite;
+}
+@keyframes hud-spin { to { transform: rotate(360deg); } }
+.hud-scan {
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent 46%, rgba(229,200,120,.28) 50%, transparent 54%);
+  background-size: 100% 300%;
+  animation: hud-scanline 2.2s ease-in-out infinite alternate;
+}
+@keyframes hud-scanline {
+  from { background-position: 0 0; }
+  to   { background-position: 0 100%; }
+}
 
 /* ═══════════════ VENUE ═══════════════ */
 .venue-card {
@@ -637,6 +702,14 @@ section { position: relative; z-index: 5; }
   to   { background-size: 112% auto; }
 }
 .venue-info { padding: 22px; text-align: center; }
+#map-embed { margin-bottom: 16px; }
+#map-embed iframe {
+  width: 100%; height: 200px;
+  border: none;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 1px rgba(201,162,75,.4);
+  filter: sepia(.14) saturate(.9);
+}
 .venue-info h3 {
   font-family: var(--serif-display);
   font-size: 21px; color: var(--maroon);

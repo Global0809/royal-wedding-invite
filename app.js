@@ -56,15 +56,72 @@ window.addEventListener("orientationchange", () => {
 
 /* ═══════════════ AUDIO — synthesized temple sounds ═══════ */
 const audio = (() => {
-  let ctx = null, master = null, droneNodes = null;
+  let ctx = null, master = null, bgm = null, noiseBuf = null;
   let muted = localStorage.getItem("wed-muted") === "1";
 
   const init = () => {
-    if (ctx) return;
+    if (ctx) { ctx.resume(); return; }
     ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();                                  // iOS ships it suspended
     master = ctx.createGain();
     master.gain.value = muted ? 0 : 1;
     master.connect(ctx.destination);
+    noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const nd = noiseBuf.getChannelData(0);
+    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  };
+
+  /* Background score — the real instrument, started inside the tap gesture */
+  const startBgm = () => {
+    if (bgm) return;
+    bgm = new Audio("assets/audio/bgm.m4a");
+    bgm.loop = true;
+    bgm.volume = 0;
+    bgm.muted = muted;
+    bgm.play().catch(() => {});
+    let v = 0;
+    const fade = setInterval(() => {
+      v = Math.min(v + 0.02, 0.32);
+      bgm.volume = v;
+      if (v >= 0.32) clearInterval(fade);
+    }, 120);
+  };
+
+  /* Soft airy whoosh for scroll gusts */
+  let lastWhoosh = -1;
+  const whoosh = (strength = 0.5) => {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    if (t - lastWhoosh < 0.65) return;
+    lastWhoosh = t;
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf; src.loop = true;
+    f.type = "bandpass"; f.Q.value = 0.6;
+    f.frequency.setValueAtTime(300, t);
+    f.frequency.exponentialRampToValueAtTime(1400, t + 0.28);
+    f.frequency.exponentialRampToValueAtTime(240, t + 0.7);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.05 * strength, t + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    src.connect(f).connect(g).connect(master);
+    src.start(t); src.stop(t + 0.75);
+  };
+
+  /* Scratchy foil texture while the finger rubs */
+  let lastScratch = 0;
+  const scratchNoise = () => {
+    if (!ctx || muted) return;
+    const t = ctx.currentTime;
+    if (t - lastScratch < 0.07) return;
+    lastScratch = t;
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = noiseBuf;
+    src.playbackRate.value = 0.8 + Math.random() * 0.5;
+    f.type = "highpass"; f.frequency.value = 2400 + Math.random() * 1200;
+    g.gain.setValueAtTime(0.028, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+    src.connect(f).connect(g).connect(master);
+    src.start(t); src.stop(t + 0.09);
   };
 
   /* Temple bell — inharmonic partials + strike noise */
@@ -95,42 +152,20 @@ const audio = (() => {
 
   const chime = () => bell(864, 0.22, 1.6);
 
-  /* Soft tanpura-like drone */
-  const startDrone = () => {
-    if (!ctx || droneNodes || REDUCED) return;
-    const g = ctx.createGain(); g.gain.value = 0;
-    const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 640; f.Q.value = 0.8;
-    const oscs = [130.81, 196.0, 261.6].map((fr, i) => {
-      const o = ctx.createOscillator();
-      o.type = i === 2 ? "sine" : "triangle";
-      o.frequency.value = fr;
-      o.detune.value = (Math.random() - 0.5) * 5;
-      const og = ctx.createGain(); og.gain.value = i === 2 ? 0.35 : 1;
-      o.connect(og).connect(f);
-      o.start();
-      return o;
-    });
-    const lfo = ctx.createOscillator(), lg = ctx.createGain();
-    lfo.frequency.value = 0.07; lg.gain.value = 140;
-    lfo.connect(lg).connect(f.frequency); lfo.start();
-    f.connect(g).connect(master);
-    g.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 4);
-    droneNodes = { oscs, g, lfo };
-  };
-
   const toggleMute = () => {
     muted = !muted;
     localStorage.setItem("wed-muted", muted ? "1" : "0");
     if (master) master.gain.linearRampToValueAtTime(muted ? 0 : 1, ctx.currentTime + 0.3);
+    if (bgm) bgm.muted = muted;
     return muted;
   };
 
   document.addEventListener("visibilitychange", () => {
-    if (!ctx) return;
-    if (document.hidden) ctx.suspend(); else ctx.resume();
+    if (document.hidden) { ctx && ctx.suspend(); bgm && bgm.pause(); }
+    else { ctx && ctx.resume(); bgm && !muted && bgm.play().catch(() => {}); }
   });
 
-  return { init, bell, chime, startDrone, toggleMute, isMuted: () => muted };
+  return { init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute, isMuted: () => muted };
 })();
 
 /* ═══════════════ FRAME STORE — two-tier loader ═══════════ */
@@ -193,7 +228,7 @@ const scrub = (() => {
   const canvas = $("#scrub"), ctx2d = canvas.getContext("2d");
   const hero = $("#hero");
   const beats = [...document.querySelectorAll(".beat")];
-  const SCRUB_VH = 330;                        // scroll distance of the film
+  const SCRUB_VH = 200;                        // scroll distance of the film (40% shorter = faster journey)
   let cur = 0, target = 0, drawn = -1, tiltX = 0, settledFrames = 0;
 
   /* beat windows in progress space: [in-start, in-end, out-start, out-end] */
@@ -215,18 +250,42 @@ const scrub = (() => {
 
   const IVORY = () => getComputedStyle(document.documentElement).getPropertyValue("--ivory").trim() || "#F4EBDB";
   let ivory = "#F4EBDB";
+  /* Offscreen feather: the frame's own edges melt to transparent before compositing,
+     so no hard rectangle can ever show, whatever the film contains. */
+  let off = null, offCtx = null;
+  const featherFrame = (img, w, h) => {
+    if (!off || off.width !== w || off.height !== h) {
+      off = document.createElement("canvas");
+      off.width = w; off.height = h;
+      offCtx = off.getContext("2d");
+    }
+    offCtx.globalCompositeOperation = "source-over";
+    offCtx.clearRect(0, 0, w, h);
+    offCtx.drawImage(img, 0, 0, w, h);
+    offCtx.globalCompositeOperation = "destination-in";
+    const mx = Math.round(w * 0.10), my = Math.round(h * 0.10);
+    const gv = offCtx.createLinearGradient(0, 0, 0, h);
+    gv.addColorStop(0, "rgba(0,0,0,0)"); gv.addColorStop(my / h, "rgba(0,0,0,1)");
+    gv.addColorStop(1 - my / h, "rgba(0,0,0,1)"); gv.addColorStop(1, "rgba(0,0,0,0)");
+    offCtx.fillStyle = gv; offCtx.fillRect(0, 0, w, h);
+    const gh = offCtx.createLinearGradient(0, 0, w, 0);
+    gh.addColorStop(0, "rgba(0,0,0,0)"); gh.addColorStop(mx / w, "rgba(0,0,0,1)");
+    gh.addColorStop(1 - mx / w, "rgba(0,0,0,1)"); gh.addColorStop(1, "rgba(0,0,0,0)");
+    offCtx.fillStyle = gh; offCtx.fillRect(0, 0, w, h);
+    return off;
+  };
   const draw = (i, settled) => {
     const img = frames.get(i, settled);
     if (!img || !img.naturalWidth) return;
     const cw = canvas.width, ch = canvas.height;
-    // The world FLOATS: contain-fit, feathered into the page ivory (CSS overlay)
+    // The world FLOATS: contain-fit, edges feathered into the page ivory
     const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
-    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
     ctx2d.fillStyle = ivory;
     ctx2d.fillRect(0, 0, cw, ch);
-    const px = tiltX * 9 * DPR;                       // gentle float with device tilt
+    const px = tiltX * 9 * DPR;
     const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
-    ctx2d.drawImage(img, (cw - w) / 2 + px, py, w, h);
+    ctx2d.drawImage(featherFrame(img, w, h), (cw - w) / 2 + px, py);
   };
 
   const beatOpacity = (p, [a, b, c, d]) => {
@@ -242,7 +301,7 @@ const scrub = (() => {
     const dist = rect.height - window.innerHeight;
     progress = clamp(-rect.top / Math.max(dist, 1), 0, 1);
     target = progress * (frames.N - 1);
-    cur = lerp(cur, target, 1 - Math.exp(-dt * 9));
+    cur = lerp(cur, target, 1 - Math.exp(-dt * 12));
     const vel = Math.abs(target - cur);
     if (vel < 1.4) settledFrames++; else settledFrames = 0;
     const i = Math.round(cur);
@@ -302,13 +361,13 @@ const petals = (() => {
     });
   };
 
-  const baseCount = () => (lowPerf ? 10 : IS_TOUCH ? 16 : 26);
+  const baseCount = () => (lowPerf ? 14 : IS_TOUCH ? 32 : 50);   // a proper petal rain
 
   const step = (dt) => {
     if (!running) return;
     c.clearRect(0, 0, canvas.width, canvas.height);
     const n = baseCount();
-    if (list.length < n && Math.random() < 0.1) spawn();
+    if (list.length < n && Math.random() < 0.18) spawn();
     gust *= 0.92;
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
@@ -362,24 +421,11 @@ const parallax = (() => {
     scrub.setTilt(tilt);
     petals.setWind(tilt * 1.4);
   };
-  const enable = async () => {
-    if (REDUCED) return;
-    try {
-      if (typeof DeviceOrientationEvent !== "undefined" &&
-          typeof DeviceOrientationEvent.requestPermission === "function") {
-        const res = await DeviceOrientationEvent.requestPermission();
-        if (res !== "granted") return;
-      }
-      window.addEventListener("deviceorientation", (e) => {
-        if (e.gamma == null) return;
-        apply(e.gamma / 32);
-      }, { passive: true });
-    } catch { /* gyro unavailable — fall through to mouse */ }
-    if (!IS_TOUCH) {
-      window.addEventListener("mousemove", (e) => {
-        apply((e.clientX / innerWidth - 0.5) * 1.6);
-      }, { passive: true });
-    }
+  const enable = () => {
+    if (REDUCED || IS_TOUCH) return;         // gyro removed by design; desktop gets mouse drift
+    window.addEventListener("mousemove", (e) => {
+      apply((e.clientX / innerWidth - 0.5) * 1.6);
+    }, { passive: true });
   };
   return { enable, getTilt: () => tilt };
 })();
@@ -532,16 +578,23 @@ const parallax = (() => {
     c.stroke();
     c.globalCompositeOperation = "source-over";
     last = { x, y };
+    audio.scratchNoise();
     if (++strokes % 14 === 0 && checkCleared()) reveal();
   };
 
   const reveal = () => {
     cleared = true;
     canvas.classList.add("cleared");
-    audio.bell(700, 0.4, 2.6);
-    if (navigator.vibrate) navigator.vibrate(35);
+    wrap.classList.add("celebrate");
+    // a small ceremony: three rising bells + petal fountain + shimmer flash
+    audio.bell(520, 0.5, 2.6);
+    setTimeout(() => audio.bell(660, 0.42, 2.4), 260);
+    setTimeout(() => audio.bell(880, 0.36, 3.0), 540);
+    if (navigator.vibrate) navigator.vibrate([30, 80, 30, 80, 60]);
     const r = wrap.getBoundingClientRect();
-    petals.burst(r.left + r.width / 2, r.top + r.height / 2, 22);
+    petals.burst(r.left + r.width / 2, r.top + r.height / 3, 26);
+    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 2, 20), 450);
+    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 4, 16), 900);
   };
 
   canvas.addEventListener("pointerdown", (e) => { try { canvas.setPointerCapture(e.pointerId); } catch {} last = null; scratch(e); });
@@ -570,12 +623,15 @@ const sanctum = (() => {
   let inView = false, cur = 0, target = 0, drawn = -1;
 
   new IntersectionObserver((es) => {
-    es.forEach((e) => { inView = e.isIntersecting; });
-  }, { threshold: 0.35 }).observe(sec);
+    es.forEach((e) => {
+      inView = e.isIntersecting;
+      if (e.isIntersecting && state === "locked") load();   // everyone gets the moment
+    });
+  }, { rootMargin: "900px 0px" }).observe(sec);
 
   const load = () => {
     state = "loading";
-    veilText.textContent = "It hears you… unfolding";
+    veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
     let done = 0;
     const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
@@ -622,14 +678,19 @@ const sanctum = (() => {
 
   const tick = (dt) => {
     magicBus.captured = state === "unlocked" && inView && magicBus.active && magicBus.handY != null;
-    if (state === "locked" && inView && magicBus.active) load();
     if (state !== "unlocked") return;
     if (magicBus.captured) {
-      // palm height scrubs the film: lower the palm = fold back, raise = unfold
+      // palm height conducts the film: lower the palm = fold back, raise = unfold
       const y = clamp((0.82 - magicBus.handY) / 0.64, 0, 1);
       target = y * (S.count - 1);
+    } else {
+      // no hand? the scroll itself carries you through the moment
+      const r = sec.getBoundingClientRect();
+      const dist = Math.max(r.height - window.innerHeight, 1);
+      const p = clamp(-r.top / dist, 0, 1);
+      target = p * (S.count - 1);
     }
-    cur = lerp(cur, target, 1 - Math.exp(-dt * 7));
+    cur = lerp(cur, target, 1 - Math.exp(-dt * 6));
     const i = Math.round(cur);
     if (i !== drawn) { draw(i); drawn = i; }
   };
@@ -663,6 +724,28 @@ const decor = (() => {
 /* ═══════════════ MAGIC MODE — hand tracking ══════════════ */
 (() => {
   const btn = $("#magic-toggle"), status = $("#magic-status"), cam = $("#magic-cam");
+  const hud = $("#magic-hud"), hudCanvas = $("#hud-canvas");
+  const hudCtx = hudCanvas.getContext("2d");
+  const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+  const drawHud = (lm) => {
+    const w = hudCanvas.width = hudCanvas.clientWidth * 2;
+    const h = hudCanvas.height = hudCanvas.clientHeight * 2;
+    if (!lm) return;
+    hudCtx.strokeStyle = "rgba(229,200,120,.9)";
+    hudCtx.fillStyle = "#F6E7B6";
+    hudCtx.lineWidth = 2;
+    BONES.forEach(([a, b]) => {
+      hudCtx.beginPath();
+      hudCtx.moveTo(lm[a].x * w, lm[a].y * h);
+      hudCtx.lineTo(lm[b].x * w, lm[b].y * h);
+      hudCtx.stroke();
+    });
+    lm.forEach((p) => {
+      hudCtx.beginPath();
+      hudCtx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+      hudCtx.fill();
+    });
+  };
   let on = false, stream = null, landmarker = null, rafId = 0, lastVideoTime = -1;
   let scrollVel = 0;
 
@@ -678,7 +761,7 @@ const decor = (() => {
     cancelAnimationFrame(rafId);
     petals.setAttractor(null);
     if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
-    cam.classList.remove("live");
+    hud.classList.remove("live");
     status.classList.add("hidden");
     scrollVel = 0;
   };
@@ -692,6 +775,7 @@ const decor = (() => {
     }
     lastVideoTime = cam.currentTime;
     const res = landmarker.detectForVideo(cam, performance.now());
+    drawHud(res.landmarks && res.landmarks[0]);
     if (res.landmarks && res.landmarks.length) {
       const tip = res.landmarks[0][9];        // palm centre
       const x = (1 - tip.x) * innerWidth;     // mirror
@@ -744,7 +828,7 @@ const decor = (() => {
       btn.classList.add("on");
       btn.querySelector(".magic-label").textContent = "Magic Mode On";
       btn.querySelector(".magic-sub").textContent = "Tap again to turn off";
-      cam.classList.add("live");
+      hud.classList.add("live");
       magicBus.active = true;
       say("Show your palm to the camera ✋");
       audio.chime();
@@ -752,8 +836,8 @@ const decor = (() => {
     } catch (err) {
       stop();
       say(err.name === "NotAllowedError"
-        ? "Camera permission was declined — magic needs eyes! Tap to retry."
-        : "Magic unavailable on this device right now.");
+        ? "No camera, no problem — just scroll: the moment unfolds anyway. Tap to retry magic."
+        : "Magic unavailable here — but scroll on: the moment unfolds with your scroll.");
       btn.querySelector(".magic-label").textContent = "Enable Magic Mode";
     }
   });
@@ -765,6 +849,24 @@ const decor = (() => {
   $("#venue-address").textContent = CFG.venue.address;
   $("#maps-btn").href = "https://www.google.com/maps/search/?api=1&query=" +
     encodeURIComponent(CFG.venue.mapsQuery);
+  /* Small live Google Map — created when the venue scrolls near (timed fallback) */
+  let mapMade = false;
+  const ensureMap = () => {
+    if (mapMade) return;
+    mapMade = true;
+    const f = document.createElement("iframe");
+    f.src = "https://maps.google.com/maps?q=" + encodeURIComponent(CFG.venue.mapsQuery) +
+            "&z=14&output=embed";
+    f.loading = "lazy";
+    f.title = "Venue map";
+    f.referrerPolicy = "no-referrer-when-downgrade";
+    $("#map-embed").appendChild(f);
+  };
+  const mapIO = new IntersectionObserver((es) => {
+    es.forEach((e) => { if (e.isIntersecting) { ensureMap(); mapIO.disconnect(); } });
+  }, { rootMargin: "600px 0px" });
+  mapIO.observe($("#map-embed"));
+  setTimeout(ensureMap, 20000);
   $("#rsvp-deadline").textContent = CFG.rsvp.deadline;
 
   const modal = $("#rsvp-modal"), slot = $("#rsvp-frame-slot");
@@ -891,6 +993,7 @@ const mainLoop = (t) => {
   lastT = t;
   const vel = scrub.tick(dt) || 0;
   petals.addGust(Math.min(vel * 0.004, 0.4));
+  if (vel > 7) audio.whoosh(Math.min(vel / 26, 1));   // airy gust on brisk scrolls
   petals.step(dt);
   sanctum.tick(dt);
   decor.tick(parallax.getTilt());
@@ -945,13 +1048,15 @@ const mainLoop = (t) => {
 
   sealBtn.addEventListener("click", () => {
     audio.init();
-    audio.bell(432, 0.55, 4);
-    parallax.enable();          // gyro permission inside the tap gesture
+    audio.bell(432, 0.55, 4);                // the seal breaks with a temple bell
+    setTimeout(() => audio.bell(648, 0.3, 3), 350);
+    audio.whoosh(1);                         // doors part with a breath of air
+    audio.startBgm();                        // the score begins inside the tap gesture
+    parallax.enable();
     loader.classList.add("open");
     $("#hero").classList.add("entered");     // names cascade in as the doors part
     setTimeout(() => {
       loader.classList.add("gone");
-      audio.startDrone();
       $("#sound-toggle").classList.remove("hidden");
       $("#thread").classList.add("on");
       petals.start();

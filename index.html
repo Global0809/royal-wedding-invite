@@ -122,36 +122,43 @@
     <canvas id="scratch-foil"></canvas>
   </div>
 
-  <div id="magic-block">
-    <button id="magic-toggle" type="button">
-      <span class="magic-ico">✨</span>
-      <span class="magic-label">Enable Magic Mode</span>
-      <span class="magic-sub">Wave your hand — the page follows</span>
-    </button>
-    <p id="magic-status" class="hidden" role="status"></p>
-    <video id="magic-cam" playsinline muted aria-hidden="true"></video>
-  </div>
   <img class="decor decor-lotus" data-depth="0.3" src="assets/decor/lotus.webp" alt="" aria-hidden="true">
 </section>
 
-<!-- ═══════════════ THE HIDDEN MOMENT (Magic exclusive) ═══════════════ -->
+<!-- ═══════════════ THE HIDDEN MOMENT (scroll-driven · hand-conducted) ═══════════════ -->
 <section id="sanctum">
-  <header class="sec-head">
-    <p class="eyebrow" id="sanctum-eyebrow">For those who believe in magic</p>
-    <h2 class="sec-title gold-foil" id="sanctum-heading">The Hidden Moment</h2>
-    <p class="sec-sub" id="sanctum-hint"></p>
-  </header>
-  <div id="sanctum-portal">
-    <div id="sanctum-view">
-      <canvas id="sanctum-canvas" aria-hidden="true"></canvas>
-      <img id="sanctum-poster" src="assets/stills/sanctum_start.webp" alt="A hidden origami moment, veiled">
-      <div id="sanctum-veil">
-        <span class="veil-lotus">🪷</span>
-        <span class="veil-text" id="sanctum-veil-text"></span>
-        <span class="veil-progress hidden" id="sanctum-progress"></span>
+  <div id="sanctum-stage">
+    <header class="sec-head">
+      <p class="eyebrow" id="sanctum-eyebrow">For those who believe in magic</p>
+      <h2 class="sec-title gold-foil" id="sanctum-heading">The Hidden Moment</h2>
+      <p class="sec-sub" id="sanctum-hint"></p>
+    </header>
+    <div id="sanctum-portal">
+      <div id="sanctum-view">
+        <canvas id="sanctum-canvas" aria-hidden="true"></canvas>
+        <img id="sanctum-poster" src="assets/stills/sanctum_start.webp" alt="A hidden origami moment, veiled">
+        <div id="sanctum-veil">
+          <span class="veil-lotus">🪷</span>
+          <span class="veil-text" id="sanctum-veil-text"></span>
+          <span class="veil-progress hidden" id="sanctum-progress"></span>
+        </div>
+      </div>
+      <img class="sanctum-arch" src="assets/decor/arch.webp" alt="" aria-hidden="true">
+    </div>
+    <div id="magic-block">
+      <button id="magic-toggle" type="button">
+        <span class="magic-ico">✨</span>
+        <span class="magic-label">Enable Magic Mode</span>
+        <span class="magic-sub">Let your hand conduct this moment</span>
+      </button>
+      <p id="magic-status" class="hidden" role="status"></p>
+      <div id="magic-hud" aria-hidden="true">
+        <video id="magic-cam" playsinline muted></video>
+        <canvas id="hud-canvas"></canvas>
+        <span class="hud-ring"></span>
+        <span class="hud-scan"></span>
       </div>
     </div>
-    <img class="sanctum-arch" src="assets/decor/arch.webp" alt="" aria-hidden="true">
   </div>
 </section>
 
@@ -168,6 +175,7 @@
     <div class="venue-info">
       <h3 id="venue-name">The Royal Palace Gardens</h3>
       <p id="venue-address">Lake Pichola Road, Udaipur, Rajasthan</p>
+      <div id="map-embed"></div>
       <a id="maps-btn" class="btn-gold" href="#" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
         Open in Google Maps
