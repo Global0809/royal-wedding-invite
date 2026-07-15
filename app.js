@@ -228,6 +228,8 @@ const scrub = (() => {
   const canvas = $("#scrub"), ctx2d = canvas.getContext("2d");
   const hero = $("#hero");
   const beats = [...document.querySelectorAll(".beat")];
+  const chapterEl = $("#crown-chapter");
+  let chapterIdx = -1;
   const SCRUB_VH = 200;                        // scroll distance of the film (40% shorter = faster journey)
   let cur = 0, target = 0, drawn = -1, tiltX = 0, settledFrames = 0;
 
@@ -310,13 +312,23 @@ const scrub = (() => {
     const key = i * 2 + (settled ? 1 : 0);
     if (key !== drawn) { draw(i, settled); drawn = key; }
 
+    let domBeat = 0, domO = -1;
     beats.forEach((el, k) => {
       const o = beatOpacity(progress, WINDOWS[k]);
+      if (o > domO) { domO = o; domBeat = k; }
       if (o <= 0) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
       el.style.visibility = "visible";
       el.style.opacity = o.toFixed(3);
       el.style.transform = `translateY(${(1 - o) * 18}px)`;
     });
+    // the crown chapter follows the story
+    if (domBeat !== chapterIdx) {
+      chapterIdx = domBeat;
+      chapterEl.textContent = beats[domBeat].dataset.chapter || "";
+      chapterEl.classList.remove("swap");
+      void chapterEl.offsetWidth;
+      chapterEl.classList.add("swap");
+    }
     return vel;
   };
 
