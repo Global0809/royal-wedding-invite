@@ -1067,33 +1067,54 @@ textarea.rf-input { resize: none; }
   background: linear-gradient(90deg, transparent, var(--gold), transparent);
 }
 #finale > * { position: relative; }
-.finale-names {
+.finale-eyebrow {
   font-family: var(--serif-display);
-  font-weight: 700;
-  font-size: clamp(26px, 7.6vw, 42px);
-  letter-spacing: .04em;
-  line-height: 1.35;
-  display: grid; gap: 6px;
+  font-size: 13px;
+  letter-spacing: .42em;
+  text-transform: uppercase;
+  color: rgba(244,235,219,.92);
 }
-.finale-amp {
-  font-family: var(--serif-body);
-  font-style: italic;
+.finale-script {
+  font-family: "Great Vibes", cursive;
   font-weight: 400;
-  font-size: .58em;
-  color: var(--gold-soft);
-  -webkit-text-fill-color: var(--gold-soft);
+  font-size: clamp(52px, 15vw, 88px);
+  line-height: 1.15;
+  margin: 6px 0 2px;
+  background: linear-gradient(105deg,
+    #a8842f 0%, var(--gold) 25%, #f6e7b6 45%, var(--gold-soft) 55%,
+    #f9efc9 65%, var(--gold) 80%, #a8842f 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: foil-sheen 7s ease-in-out infinite;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.35));
 }
-.finale-line {
-  font-style: italic;
-  font-size: 17px;
-  color: rgba(244,235,219,.9);
+.finale-heart {
+  font-size: 24px;
+  color: #D8353F;
+  margin: 8px 0 14px;
+  animation: heart-beat 1.8s ease-in-out infinite;
+  text-shadow: 0 2px 10px rgba(216,53,63,.5);
+}
+@keyframes heart-beat {
+  0%, 100% { transform: scale(1); }
+  12% { transform: scale(1.22); }
+  24% { transform: scale(1); }
+  36% { transform: scale(1.14); }
+  48% { transform: scale(1); }
 }
 .finale-date {
-  font-family: var(--serif-display);
-  font-size: 12.5px;
-  letter-spacing: .3em;
+  font-family: var(--serif-body);
+  font-style: italic;
+  font-size: clamp(18px, 5vw, 23px);
   color: var(--gold-soft);
-  margin: 10px 0 4px;
+  margin-bottom: 12px;
 }
-#finale .foot-line { color: rgba(244,235,219,.75); margin-top: 14px; }
-#finale .foot-credit { color: rgba(244,235,219,.4); }
+.finale-tag {
+  font-family: var(--serif-display);
+  font-size: 13px;
+  letter-spacing: .28em;
+  text-transform: uppercase;
+  color: rgba(244,235,219,.85);
+}
