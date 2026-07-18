@@ -279,6 +279,7 @@ const scrub = (() => {
   const draw = (i, settled) => {
     const img = frames.get(i, settled);
     if (!img || !img.naturalWidth) return;
+    if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return; }
     const cw = canvas.width, ch = canvas.height;
     // The world FLOATS: contain-fit, edges feathered into the page ivory
     const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
@@ -874,15 +875,61 @@ const decor = (() => {
   $("#rsvp-deadline").textContent = CFG.rsvp.deadline;
 
   const modal = $("#rsvp-modal"), slot = $("#rsvp-frame-slot");
-  let framed = false;
-  $("#rsvp-btn").addEventListener("click", () => {
-    if (!framed) {
+  const hasRealForm = CFG.rsvp.formUrl && !/PLACEHOLDER/i.test(CFG.rsvp.formUrl);
+  let built = false;
+  const buildRsvp = () => {
+    if (built) return;
+    built = true;
+    if (hasRealForm) {
       const f = document.createElement("iframe");
       f.src = CFG.rsvp.formUrl;
       f.loading = "lazy";
       slot.appendChild(f);
-      framed = true;
+      return;
     }
+    // Native royal RSVP (no Google Form configured yet)
+    slot.innerHTML = `
+      <form id="rsvp-form" novalidate>
+        <label class="rf-label">Your name
+          <input class="rf-input" name="name" type="text" autocomplete="name" placeholder="Guest of honour" required>
+        </label>
+        <div class="rf-label">Will you grace the occasion?
+          <div class="rf-choices">
+            <label class="rf-chip"><input type="radio" name="attending" value="yes" checked><span>Joyfully accepts</span></label>
+            <label class="rf-chip"><input type="radio" name="attending" value="no"><span>Regretfully declines</span></label>
+          </div>
+        </div>
+        <label class="rf-label">Guests attending
+          <select class="rf-input" name="count">
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5+</option>
+          </select>
+        </label>
+        <label class="rf-label">A note for the couple <span class="rf-opt">(optional)</span>
+          <textarea class="rf-input" name="note" rows="2" placeholder="Blessings, wishes, song requests…"></textarea>
+        </label>
+        <button class="btn-maroon rf-submit" type="submit">Send with love</button>
+      </form>
+      <div id="rsvp-done" class="hidden">
+        <p class="rf-done-mark">🪷</p>
+        <h4 class="gold-foil">धन्यवाद · Thank you</h4>
+        <p class="rf-done-text">Your response has been received.<br>We can't wait to celebrate with you.</p>
+      </div>`;
+    slot.querySelector("#rsvp-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      if (!data.name || !data.name.trim()) { e.target.querySelector("[name=name]").focus(); return; }
+      try { localStorage.setItem("wed-rsvp", JSON.stringify({ ...data, at: new Date().toISOString() })); } catch {}
+      e.target.classList.add("hidden");
+      slot.querySelector("#rsvp-done").classList.remove("hidden");
+      audio.bell(660, 0.45, 2.6);
+      setTimeout(() => audio.bell(880, 0.32, 2.4), 300);
+      if (navigator.vibrate) navigator.vibrate([25, 60, 40]);
+      const r = modal.querySelector(".modal-sheet").getBoundingClientRect();
+      petals.burst(r.left + r.width / 2, r.top + 80, 24);
+    });
+  };
+  $("#rsvp-btn").addEventListener("click", () => {
+    buildRsvp();
     modal.classList.remove("hidden");
     document.body.style.overflow = "hidden";
     audio.chime();
@@ -1044,7 +1091,7 @@ const mainLoop = (t) => {
     const lit = Math.round(f * ringPetals.length);
     for (let k = 0; k < lit; k++) ringPetals[k].style.opacity = 1;
   }).then(() => {
-    scrub.firstPaint();
+    try { scrub.firstPaint(); } catch { /* paint must never block entry */ }
     statusEl.classList.add("hidden");
     tapEl.classList.remove("hidden");
     sealBtn.disabled = false;

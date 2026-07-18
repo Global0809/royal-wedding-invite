@@ -863,6 +863,60 @@ footer { text-align: center; margin-top: 64px; }
   background: #fff;
 }
 
+/* Native royal RSVP form (used until a real Google Form URL is configured) */
+#rsvp-form { display: grid; gap: 16px; padding: 4px 4px 2px; }
+.rf-label {
+  display: grid; gap: 7px;
+  font-family: var(--serif-display);
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--maroon);
+}
+.rf-opt { text-transform: none; letter-spacing: 0; opacity: .6; font-family: var(--serif-body); }
+.rf-input {
+  font-family: var(--serif-body);
+  font-size: 17px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(109,26,51,.28);
+  background: #fffdf7;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .25s ease, box-shadow .25s ease;
+}
+.rf-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201,162,75,.22);
+}
+textarea.rf-input { resize: none; }
+.rf-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.rf-chip { position: relative; }
+.rf-chip input { position: absolute; opacity: 0; }
+.rf-chip span {
+  display: block;
+  text-align: center;
+  padding: 12px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(109,26,51,.28);
+  font-family: var(--serif-body);
+  font-size: 15.5px;
+  text-transform: none; letter-spacing: 0;
+  color: var(--ink);
+  background: #fffdf7;
+  transition: all .25s ease;
+}
+.rf-chip input:checked + span {
+  background: linear-gradient(160deg, #5a1429, var(--maroon-deep));
+  color: var(--gold-soft);
+  border-color: var(--gold);
+  box-shadow: 0 6px 18px rgba(74,15,34,.3);
+}
+.rf-submit { justify-self: center; margin-top: 2px; }
+#rsvp-done { text-align: center; padding: 26px 10px 18px; display: grid; gap: 10px; }
+#rsvp-done.hidden { display: none; }
+.rf-done-mark { font-size: 44px; animation: veil-breathe 2.8s ease-in-out infinite; }
+#rsvp-done h4 { font-family: var(--serif-display); font-size: 22px; }
+.rf-done-text { font-size: 16.5px; line-height: 1.5; opacity: .85; }
+
 /* ═══════════════ GOLDEN SCROLL THREAD ════════════════════ */
 #thread {
   position: fixed;
