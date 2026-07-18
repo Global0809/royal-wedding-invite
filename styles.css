@@ -979,26 +979,41 @@ textarea.rf-input { resize: none; }
 /* ═══════════════ FILM BANDS — cinematic loops ════════════ */
 .film-band {
   position: relative;
-  height: 54vh;
-  max-height: 460px;
-  overflow: hidden;
-  background: var(--maroon-deep);
-  border-top: 1px solid rgba(201,162,75,.55);
-  border-bottom: 1px solid rgba(201,162,75,.55);
+  width: min(calc(100% - 40px), 640px);
+  margin: 34px auto;
+  border-radius: 18px;
+  padding: 2px;                              /* the animated border thickness */
+  background: linear-gradient(110deg,
+    #8a6a25, var(--gold) 20%, #f6e7b6 38%, var(--gold-soft) 50%,
+    #f9efc9 62%, var(--gold) 80%, #8a6a25);
+  background-size: 300% 100%;
+  animation: band-border 5s linear infinite;
+  box-shadow: 0 12px 36px rgba(74,15,34,.22);
 }
-.film-band video {
+@keyframes band-border {
+  from { background-position: 0% 0; }
+  to   { background-position: 300% 0; }
+}
+.film-inner {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  aspect-ratio: 2162 / 1080;                 /* the film's native widescreen ratio */
+  background: var(--maroon-deep);
+}
+.film-inner video {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
   object-fit: cover;
 }
-.film-band::after {
+.film-inner::after {
   content: "";
   position: absolute; inset: 0;
   pointer-events: none;
-  background: linear-gradient(to top, rgba(46,8,22,.62), transparent 42%);
+  background: linear-gradient(to top, rgba(46,8,22,.58), transparent 48%);
 }
 .film-caption {
-  position: absolute; left: 24px; bottom: 20px; z-index: 2;
+  position: absolute; left: 18px; bottom: 13px; z-index: 2;
   display: grid; gap: 3px;
 }
 .film-eyebrow {
@@ -1009,7 +1024,7 @@ textarea.rf-input { resize: none; }
 .film-line {
   font-family: var(--serif-body);
   font-style: italic;
-  font-size: 16.5px;
+  font-size: 14.5px;
   color: var(--ivory);
   text-shadow: 0 1px 8px rgba(46,8,22,.8);
 }

@@ -6,8 +6,8 @@
 window.WEDDING_CONFIG = {
 
   couple: {
-    groom: "Mihir",
-    bride: "Meera",
+    groom: "Mrigank",
+    bride: "Mishi",
     monogram: "M · M",           // shown in the wax seal + header
     tagline: "Two souls, one sacred fire",
   },
