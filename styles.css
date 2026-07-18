@@ -230,16 +230,6 @@ body::after {
   pointer-events: none;
   will-change: opacity, transform;
 }
-/* Soft maroon scrim behind the copy zone so text never sinks into the film */
-.beat::before {
-  content: "";
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 46%;
-  background:
-    radial-gradient(90% 90% at 50% 88%, rgba(46,8,22,.46), rgba(46,8,22,.22) 55%, transparent 78%);
-  pointer-events: none;
-}
 .beat > * { position: relative; }
 .beat[data-beat="0"] { justify-content: flex-end; }
 
