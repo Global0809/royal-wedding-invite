@@ -870,8 +870,11 @@ const decor = (() => {
 (() => {
   $("#venue-name").textContent = CFG.venue.name;
   $("#venue-address").textContent = CFG.venue.address;
-  $("#maps-btn").href = "https://www.google.com/maps/search/?api=1&query=" +
+  const mapsHref = "https://www.google.com/maps/search/?api=1&query=" +
     encodeURIComponent(CFG.venue.mapsQuery);
+  $("#maps-btn").href = mapsHref;
+  const mapLink = $("#map-link");
+  if (mapLink) mapLink.href = mapsHref;
   $("#rsvp-deadline").textContent = CFG.rsvp.deadline;
 
   const modal = $("#rsvp-modal"), slot = $("#rsvp-frame-slot");
@@ -938,6 +941,29 @@ const decor = (() => {
   $("#rsvp-close").addEventListener("click", close);
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
   addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
+
+/* ═══════════════ FILM BANDS — lazy cinematic loops ═══════ */
+const films = (() => {
+  const vids = [...document.querySelectorAll(".film-band video")];
+  const wake = (v) => {
+    if (!v.src && v.dataset.src) v.src = v.dataset.src;
+    if (v.paused) v.play().catch(() => {});
+  };
+  let acc = 0;
+  /* driven from the main loop — observer-independent, works in every browser */
+  const tick = (dt) => {
+    acc += dt;
+    if (acc < 0.4 || !vids.length) return;
+    acc = 0;
+    vids.forEach((v) => {
+      const r = v.getBoundingClientRect();
+      const near = r.bottom > -300 && r.top < innerHeight + 300;
+      if (near) wake(v);
+      else if (!v.paused) v.pause();
+    });
+  };
+  return { tick };
 })();
 
 /* ═══════════════ SOUND TOGGLE ════════════════════════════ */
@@ -1048,6 +1074,7 @@ const mainLoop = (t) => {
   petals.step(dt);
   sanctum.tick(dt);
   decor.tick(parallax.getTilt());
+  films.tick(dt);
   // golden scroll thread
   const doc = document.documentElement;
   const sp = clamp(scrollY / Math.max(doc.scrollHeight - innerHeight, 1), 0, 1);
