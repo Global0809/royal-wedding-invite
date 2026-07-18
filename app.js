@@ -952,6 +952,17 @@ const decor = (() => {
 })();
 
 /* ═══════════════ FILM BANDS — lazy cinematic loops ═══════ */
+const finale = (() => {
+  const el = document.getElementById("finale");
+  let done = false;
+  const tick = () => {
+    if (done || !el) return;
+    const r = el.getBoundingClientRect();
+    if (r.top < innerHeight * 0.78) { done = true; el.classList.add("shown"); audio.chime(); }
+  };
+  return { tick };
+})();
+
 const films = (() => {
   const vids = [...document.querySelectorAll(".film-band video")];
   const wake = (v) => {
@@ -1083,6 +1094,7 @@ const mainLoop = (t) => {
   sanctum.tick(dt);
   decor.tick(parallax.getTilt());
   films.tick(dt);
+  finale.tick();
   // golden scroll thread
   const doc = document.documentElement;
   const sp = clamp(scrollY / Math.max(doc.scrollHeight - innerHeight, 1), 0, 1);
