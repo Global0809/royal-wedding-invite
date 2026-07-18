@@ -373,13 +373,13 @@ const petals = (() => {
     });
   };
 
-  const baseCount = () => (lowPerf ? 14 : IS_TOUCH ? 32 : 50);   // a proper petal rain
+  const baseCount = () => (lowPerf ? 8 : IS_TOUCH ? 16 : 26);    // light petal drift
 
   const step = (dt) => {
     if (!running) return;
     c.clearRect(0, 0, canvas.width, canvas.height);
     const n = baseCount();
-    if (list.length < n && Math.random() < 0.18) spawn();
+    if (list.length < n && Math.random() < 0.1) spawn();
     gust *= 0.92;
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
@@ -871,24 +871,6 @@ const decor = (() => {
   $("#venue-address").textContent = CFG.venue.address;
   $("#maps-btn").href = "https://www.google.com/maps/search/?api=1&query=" +
     encodeURIComponent(CFG.venue.mapsQuery);
-  /* Small live Google Map — created when the venue scrolls near (timed fallback) */
-  let mapMade = false;
-  const ensureMap = () => {
-    if (mapMade) return;
-    mapMade = true;
-    const f = document.createElement("iframe");
-    f.src = "https://maps.google.com/maps?q=" + encodeURIComponent(CFG.venue.mapsQuery) +
-            "&z=14&output=embed";
-    f.loading = "lazy";
-    f.title = "Venue map";
-    f.referrerPolicy = "no-referrer-when-downgrade";
-    $("#map-embed").appendChild(f);
-  };
-  const mapIO = new IntersectionObserver((es) => {
-    es.forEach((e) => { if (e.isIntersecting) { ensureMap(); mapIO.disconnect(); } });
-  }, { rootMargin: "600px 0px" });
-  mapIO.observe($("#map-embed"));
-  setTimeout(ensureMap, 20000);
   $("#rsvp-deadline").textContent = CFG.rsvp.deadline;
 
   const modal = $("#rsvp-modal"), slot = $("#rsvp-frame-slot");
