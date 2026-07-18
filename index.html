@@ -103,9 +103,9 @@
 
 <!-- ═══════════════ THE CELEBRATIONS ═══════════════ -->
 <section id="events">
-  <img class="decor decor-toran" src="assets/decor/toran.webp" alt="" aria-hidden="true">
-  <img class="decor decor-elephant" data-depth="0.22" src="assets/decor/elephant.webp" alt="" aria-hidden="true">
-  <img class="decor decor-umbrella" data-depth="0.38" src="assets/decor/umbrella.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-toran" src="assets/decor/toran.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-elephant" data-depth="0.22" src="assets/decor/elephant.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-umbrella" data-depth="0.38" src="assets/decor/umbrella.webp" alt="" aria-hidden="true">
   <header class="sec-head">
     <p class="eyebrow">Four days of festivity</p>
     <h2 class="sec-title gold-foil">The Celebrations</h2>
@@ -132,7 +132,7 @@
     <canvas id="scratch-foil"></canvas>
   </div>
 
-  <img class="decor decor-lotus" data-depth="0.3" src="assets/decor/lotus.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-lotus" data-depth="0.3" src="assets/decor/lotus.webp" alt="" aria-hidden="true">
 </section>
 
 <!-- ═══════════════ THE HIDDEN MOMENT (scroll-driven · hand-conducted) ═══════════════ -->
@@ -146,14 +146,14 @@
     <div id="sanctum-portal">
       <div id="sanctum-view">
         <canvas id="sanctum-canvas" aria-hidden="true"></canvas>
-        <img id="sanctum-poster" src="assets/stills/sanctum_start.webp" alt="A hidden origami moment, veiled">
+        <img loading="lazy" id="sanctum-poster" src="assets/stills/sanctum_start.webp" alt="A hidden origami moment, veiled">
         <div id="sanctum-veil">
           <span class="veil-lotus">🪷</span>
           <span class="veil-text" id="sanctum-veil-text"></span>
           <span class="veil-progress hidden" id="sanctum-progress"></span>
         </div>
       </div>
-      <img class="sanctum-arch" src="assets/decor/arch.webp" alt="" aria-hidden="true">
+      <img loading="lazy" class="sanctum-arch" src="assets/decor/arch.webp" alt="" aria-hidden="true">
     </div>
     <div id="magic-block">
       <button id="magic-toggle" type="button">
@@ -207,12 +207,23 @@
     <button id="rsvp-btn" class="btn-maroon">RSVP · Confirm Your Presence</button>
   </div>
 
-  <footer>
-    <div class="foot-diyas">
-      <img class="foot-diya" src="assets/decor/diya.webp" alt="" aria-hidden="true">
-      <p class="foot-monogram gold-foil">M · M</p>
-      <img class="foot-diya" src="assets/decor/diya.webp" alt="" aria-hidden="true">
+  <!-- ═══════════════ FILM FINALE (portrait) ═══════════════ -->
+  <div class="film-band portrait">
+    <div class="film-inner">
+      <video muted loop playsinline preload="none" poster="assets/film/film3_poster.webp" data-src="assets/film/film3.mp4" aria-label="The grand walk"></video>
+      <p class="film-caption"><span class="film-eyebrow">The Grand Walk</span><span class="film-line">Every step, toward forever</span></p>
     </div>
+  </div>
+
+  <footer id="finale">
+    <div class="foot-diyas">
+      <img class="foot-diya" src="assets/decor/diya.webp" alt="" aria-hidden="true" loading="lazy">
+      <p class="foot-monogram gold-foil">M · M</p>
+      <img class="foot-diya" src="assets/decor/diya.webp" alt="" aria-hidden="true" loading="lazy">
+    </div>
+    <h3 class="finale-names gold-foil">Mishi Agarwal<span class="finale-amp">weds</span>Mrigank Singh Rathore</h3>
+    <p class="finale-line">Two souls, one sacred fire</p>
+    <p class="finale-date">26 · 11 · 2026 — Udaipur</p>
     <p class="foot-line">We can't wait to celebrate with you.</p>
     <p class="foot-credit">A bespoke invitation experience</p>
   </footer>
