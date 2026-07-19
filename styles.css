@@ -161,8 +161,14 @@ body::after {
   position: sticky; top: 0;
   height: calc(var(--vh) * 100);
   overflow: hidden;
+  contain: paint;
+  isolation: isolate;
 }
-#scrub { position: absolute; inset: 0; width: 100%; height: 100%; }
+#scrub {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  background: var(--ivory);
+}
 /* A slow beam of golden light drifting across the world */
 .hero-sticky::after {
   content: "";
@@ -427,9 +433,18 @@ section { position: relative; z-index: 5; }
 #sanctum-stage .sec-head { margin-bottom: 18px; }
 #sanctum-portal {
   position: relative;
-  width: min(88vw, 50dvh, 440px);   /* fits stage together with heading + magic button */
+  width: min(88vw, calc(var(--vh) * 50), 440px);   /* stable while mobile browser chrome moves */
   margin: 0 auto;
   aspect-ratio: 1025 / 1126;        /* arch cutout ratio */
+}
+#sanctum-portal::after {
+  content: "";
+  position: absolute; inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: url("assets/decor/arch.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 0 42px rgba(229,200,120,.85));
 }
 #sanctum-filmbar {
   width: min(60vw, 240px);
@@ -460,10 +475,10 @@ section { position: relative; z-index: 5; }
   pointer-events: none;
   filter: drop-shadow(0 16px 34px rgba(74,15,34,.28));
 }
-#sanctum.unlocked .sanctum-arch { animation: arch-bless 2.2s ease; }
+#sanctum.unlocked #sanctum-portal::after { animation: arch-bless 2.2s ease; }
 @keyframes arch-bless {
-  0%, 100% { filter: drop-shadow(0 16px 34px rgba(74,15,34,.28)); }
-  40% { filter: drop-shadow(0 0 42px rgba(229,200,120,.85)); }
+  0%, 100% { opacity: 0; transform: scale(1); }
+  40% { opacity: 1; transform: scale(1.008); }
 }
 #sanctum-view {
   position: absolute;
@@ -473,6 +488,8 @@ section { position: relative; z-index: 5; }
   overflow: hidden;
   z-index: 1;
   background: var(--maroon-deep);
+  contain: paint;
+  isolation: isolate;
 }
 #sanctum-view canvas, #sanctum-view img {
   position: absolute; inset: 0;
@@ -486,6 +503,7 @@ section { position: relative; z-index: 5; }
   animation: kenburns 16s ease-in-out infinite alternate;
   transition: opacity .9s ease;
 }
+#sanctum.loading #sanctum-poster { animation-play-state: paused; }
 @keyframes kenburns {
   from { transform: scale(1.04) translateY(0); }
   to   { transform: scale(1.16) translateY(-3%); }
@@ -991,6 +1009,11 @@ textarea.rf-input { resize: none; }
   .decor-toran { animation: none; }
   .beat,
   .decor { will-change: auto; }
+  .crown-chapter.swap { animation: chapter-mobile-in .38s ease-out; }
+}
+@keyframes chapter-mobile-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: .85; transform: none; }
 }
 
 /* ═══════════════ REDUCED MOTION ═══════════════ */

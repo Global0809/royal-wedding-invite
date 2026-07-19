@@ -40,7 +40,13 @@ const setVh = () => {
 };
 setVh();
 let lastW = window.innerWidth, rzTimer = 0;
-const remeasure = () => { setVh(); scrub.resize(); petals.resize(); };
+const remeasure = () => {
+  setVh();
+  scrub.resize();
+  petals.resize();
+  sanctum.resize();
+  decor.resize();
+};
 window.addEventListener("resize", () => {
   // On touch devices ignore height-only resizes (URL bar collapse)
   if (IS_TOUCH && window.innerWidth === lastW) return;
@@ -226,15 +232,18 @@ const frames = (() => {
   const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 5;
   const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 18 : 26;
   const LO_BEHIND = IS_TOUCH ? 8 : 12;
-  const LO_KEEP = LO_AHEAD + LO_BEHIND + 8;
+  const LO_KEEP_AHEAD = LO_AHEAD + 4;
+  const LO_KEEP_BEHIND = LO_BEHIND + 4;
   const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
-  let loActive = 0, loStreaming = false;
+  let loActive = 0, loStreaming = false, demandActive = true;
   let hiActive = 0, current = 0, hiStarted = false;
 
   const evictLo = () => {
     if (!loStreaming) return;
+    const keepAhead = demandActive ? LO_KEEP_AHEAD : 3;
+    const keepBehind = demandActive ? LO_KEEP_BEHIND : 3;
     for (let i = 0; i < N; i++) {
-      if (loState[i] === 2 && Math.abs(i - current) > LO_KEEP) {
+      if (loState[i] === 2 && (i < current - keepBehind || i > current + keepAhead)) {
         if (lo[i]) {
           lo[i].onload = lo[i].onerror = null;
           lo[i].src = "";
@@ -251,7 +260,11 @@ const frames = (() => {
     loActive++;
     const img = new Image();
     img.decoding = "async";
-    if (loStreaming) img.fetchPriority = "low";
+    img._scrubKey = `lo-${i}`;
+    if (loStreaming) {
+      const distance = Math.abs(i - current);
+      img.fetchPriority = distance <= 2 ? "high" : distance <= LO_AHEAD ? "auto" : "low";
+    }
     lo[i] = img;
     let settled = false;
     const settle = () => {
@@ -264,7 +277,11 @@ const frames = (() => {
       if (done) done();
     };
     const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
-    img.onload = img.onerror = settle;
+    img.onload = () => {
+      if (typeof img.decode === "function") img.decode().then(settle, settle);
+      else settle();
+    };
+    img.onerror = settle;
     img.src = CFG.frames.loPath + name(i);
     return true;
   };
@@ -295,7 +312,7 @@ const frames = (() => {
   });
 
   const pumpLo = () => {
-    if (!loStreaming) return;
+    if (!loStreaming || !demandActive) return;
     while (loActive < LO_LIMIT) {
       let idx = -1;
       for (let d = 0; d <= LO_AHEAD; d++) {
@@ -313,8 +330,9 @@ const frames = (() => {
   };
 
   const evictHi = () => {
+    const keep = demandActive ? HI_KEEP : 1;
     for (let i = 0; i < N; i++) {
-      if (hiState[i] === 2 && Math.abs(i - current) > HI_KEEP) {
+      if (hiState[i] === 2 && Math.abs(i - current) > keep) {
         if (hi[i]) {
           hi[i].onload = hi[i].onerror = null;
           hi[i].src = "";
@@ -326,7 +344,7 @@ const frames = (() => {
   };
 
   const pumpHi = () => {
-    if (!hiEnabled || !hiStarted) return;
+    if (!hiEnabled || !hiStarted || !demandActive) return;
     while (hiActive < HI_LIMIT) {
       let idx = -1;
       for (let d = 0; d <= HI_RADIUS; d++) {
@@ -338,6 +356,7 @@ const frames = (() => {
       hiState[idx] = 1; hiActive++;
       const img = new Image();
       img.decoding = "async";
+      img._scrubKey = `hi-${idx}`;
       hi[idx] = img;
       let settled = false;
       const finish = (ready) => {
@@ -350,7 +369,10 @@ const frames = (() => {
         pumpHi();
       };
       const timeout = setTimeout(() => { img.src = ""; finish(false); }, 9000);
-      img.onload = () => finish(true);
+      img.onload = () => {
+        if (typeof img.decode === "function") img.decode().then(() => finish(true), () => finish(true));
+        else finish(true);
+      };
       img.onerror = () => finish(false);
       img.src = CFG.frames.hiPath + name(idx);
     }
@@ -359,10 +381,24 @@ const frames = (() => {
   return {
     N,
     preloadLo,
-    startHi: () => {
+    startLo: () => {
+      if (loStreaming) return;
       loStreaming = true;
       pumpLo();
-      if (hiEnabled) setTimeout(() => { hiStarted = true; pumpHi(); }, 1550);
+    },
+    startHi: () => {
+      if (!hiEnabled || hiStarted) return;
+      setTimeout(() => { hiStarted = true; pumpHi(); }, 1550);
+    },
+    setDemandActive: (next) => {
+      demandActive = next;
+      if (demandActive) {
+        pumpLo();
+        pumpHi();
+      } else {
+        evictLo();
+        evictHi();
+      }
     },
     setPlayhead: (i) => {
       const next = clamp(Math.round(i), 0, N - 1);
@@ -386,6 +422,7 @@ const frames = (() => {
     },
     prime: (i, img) => {
       if (i < 0 || i >= N || !img || !img.naturalWidth) return;
+      img._scrubKey = `lo-${i}`;
       lo[i] = img;
       loState[i] = 2;
     },
@@ -394,17 +431,28 @@ const frames = (() => {
 
 /* ═══════════════ SCRUB ENGINE — the unfolding ════════════ */
 const scrub = (() => {
-  const canvas = $("#scrub"), ctx2d = canvas.getContext("2d");
+  const canvas = $("#scrub"), ctx2d = canvas.getContext("2d", { alpha: false });
   const hero = $("#hero");
   const beats = [...document.querySelectorAll(".beat")];
   const chapterEl = $("#crown-chapter");
-  let chapterIdx = -1;
+  let chapterIdx = -1, chapterSwapToken = 0;
   const SCRUB_VH = 200;                        // scroll distance of the film (40% shorter = faster journey)
-  let cur = 0, target = 0, drawn = -1, tiltX = 0, settledFrames = 0, active = true;
+  let cur = 0, target = 0, drawn = "", tiltX = 0, settledFrames = 0, active = true;
+  let scrollStart = 0, scrollDistance = 1, backdropKey = "";
+
+  const measureScrollRange = () => {
+    const rect = hero.getBoundingClientRect();
+    scrollStart = window.scrollY + rect.top;
+    scrollDistance = Math.max(rect.height - vhPx * 100, 1);
+  };
 
   new IntersectionObserver(([entry]) => {
     active = entry.isIntersecting;
-    if (active) drawn = -1;
+    frames.setDemandActive(active);
+    if (active) {
+      measureScrollRange();
+      drawn = "";
+    }
   }, { rootMargin: "160px 0px" }).observe(hero);
 
   /* beat windows in progress space: [in-start, in-end, out-start, out-end] */
@@ -417,28 +465,42 @@ const scrub = (() => {
   ];
 
   const resize = () => {
-    canvas.width = Math.round(canvas.clientWidth * DPR);
-    canvas.height = Math.round(canvas.clientHeight * DPR);
+    const nextWidth = Math.round(canvas.clientWidth * DPR);
+    const nextHeight = Math.round(canvas.clientHeight * DPR);
+    if (canvas.width !== nextWidth || canvas.height !== nextHeight) {
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      ctx2d.imageSmoothingEnabled = true;
+      ctx2d.imageSmoothingQuality = "high";
+      backdropKey = "";
+    }
     ivory = IVORY();
-    drawn = -1;
+    drawn = "";
     hero.style.height = (SCRUB_VH + 100) * vhPx + "px";
+    measureScrollRange();
   };
 
   const IVORY = () => getComputedStyle(document.documentElement).getPropertyValue("--ivory").trim() || "#F4EBDB";
   let ivory = "#F4EBDB";
-  const draw = (i, settled) => {
-    const img = frames.get(i, settled);
-    if (!img || !img.naturalWidth) return;
+  const draw = (img) => {
+    if (!img || !img.naturalWidth) return false;
     if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return; }
     const cw = canvas.width, ch = canvas.height;
     // The world floats above the page; the CSS vignette feathers its edges.
     const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
     const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
-    ctx2d.fillStyle = ivory;
-    ctx2d.fillRect(0, 0, cw, ch);
     const px = tiltX * 9 * DPR;
     const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
-    ctx2d.drawImage(img, (cw - w) / 2 + px, py, w, h);
+    const x = Math.round((cw - w) / 2 + px);
+    const y = Math.round(py);
+    const nextBackdropKey = `${x}:${y}:${w}:${h}`;
+    if (nextBackdropKey !== backdropKey) {
+      ctx2d.fillStyle = ivory;
+      ctx2d.fillRect(0, 0, cw, ch);
+      backdropKey = nextBackdropKey;
+    }
+    ctx2d.drawImage(img, x, y, w, h);
+    return true;
   };
 
   const beatOpacity = (p, [a, b, c, d]) => {
@@ -451,23 +513,25 @@ const scrub = (() => {
   let progress = 0, lastBeatProgress = -1;
   const tick = (dt) => {
     if (!active) return 0;
-    const rect = hero.getBoundingClientRect();
-    const dist = rect.height - window.innerHeight;
-    progress = clamp(-rect.top / Math.max(dist, 1), 0, 1);
+    progress = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
     target = progress * (frames.N - 1);
-    cur = lerp(cur, target, 1 - Math.exp(-dt * 12));
+    const gap = Math.abs(target - cur);
+    const response = IS_TOUCH ? (gap > 10 ? 24 : 18) : (gap > 10 ? 18 : 12);
+    cur = lerp(cur, target, 1 - Math.exp(-dt * response));
     const vel = Math.abs(target - cur);
     if (vel < 1.4) settledFrames++; else settledFrames = 0;
     const i = Math.round(cur);
     frames.setPlayhead(i);
     const settled = settledFrames > 2;
-    const key = i * 2 + (settled ? 1 : 0);
-    if (key !== drawn) { draw(i, settled); drawn = key; }
+    const img = frames.get(i, settled);
+    const key = img?._scrubKey || "";
+    if (img && key !== drawn && draw(img)) drawn = key;
 
-    if (Math.abs(progress - lastBeatProgress) > .0001) {
+    const displayProgress = clamp(cur / Math.max(frames.N - 1, 1), 0, 1);
+    if (Math.abs(displayProgress - lastBeatProgress) > .0001) {
       let domBeat = 0, domO = -1;
       beats.forEach((el, k) => {
-        const o = beatOpacity(progress, WINDOWS[k]);
+        const o = beatOpacity(displayProgress, WINDOWS[k]);
         if (o > domO) { domO = o; domBeat = k; }
         if (o <= 0) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
         el.style.visibility = "visible";
@@ -479,19 +543,21 @@ const scrub = (() => {
         chapterIdx = domBeat;
         chapterEl.textContent = beats[domBeat].dataset.chapter || "";
         chapterEl.classList.remove("swap");
-        void chapterEl.offsetWidth;
-        chapterEl.classList.add("swap");
+        const token = ++chapterSwapToken;
+        requestAnimationFrame(() => {
+          if (token === chapterSwapToken) chapterEl.classList.add("swap");
+        });
       }
-      lastBeatProgress = progress;
+      lastBeatProgress = displayProgress;
     }
     return vel;
   };
 
   return {
     resize, tick,
-    setTilt: (x) => { tiltX = x; drawn = -1; },
+    setTilt: (x) => { if (Math.abs(x - tiltX) > .002) { tiltX = x; drawn = ""; } },
     getProgress: () => progress,
-    firstPaint: () => draw(0, false),
+    firstPaint: () => draw(frames.get(0, false)),
   };
 })();
 
@@ -611,13 +677,17 @@ const parallax = (() => {
 (() => {
   const tgt = new Date(CFG.wedding.dateISO).getTime();
   const el = { d: $("#cd-d"), h: $("#cd-h"), m: $("#cd-m"), s: $("#cd-s") };
+  const rollTokens = new WeakMap();
   const pad = (n) => String(n).padStart(2, "0");
   const roll = (node, txt) => {
     if (node.textContent === txt) return;
     node.textContent = txt;
     node.classList.remove("tick");
-    void node.offsetWidth;             // restart the roll animation
-    node.classList.add("tick");
+    const token = (rollTokens.get(node) || 0) + 1;
+    rollTokens.set(node, token);
+    requestAnimationFrame(() => {
+      if (rollTokens.get(node) === token) node.classList.add("tick");
+    });
   };
   const upd = () => {
     let ms = tgt - Date.now();
@@ -835,13 +905,13 @@ if (/[?&]tick/.test(location.search)) window.__magicBus = magicBus;   // QA hook
 /* ═══════════════ SANCTUM — the hand-unlocked hidden film ═ */
 const sanctum = (() => {
   const sec = $("#sanctum");
-  if (!sec) return { tick: () => {} };
+  if (!sec) return { tick: () => {}, resize: () => {} };
   const S = CFG.sanctum;
   $("#sanctum-eyebrow").textContent = S.eyebrow;
   $("#sanctum-heading").textContent = S.heading;
   $("#sanctum-hint").textContent = S.hint;
   $("#sanctum-veil-text").textContent = S.veilText;
-  const canvas = $("#sanctum-canvas"), c = canvas.getContext("2d");
+  const canvas = $("#sanctum-canvas"), c = canvas.getContext("2d", { alpha: false });
   const progressEl = $("#sanctum-progress"), veilText = $("#sanctum-veil-text");
   const imgs = new Array(S.count);
   const imgState = new Uint8Array(S.count);
@@ -849,16 +919,26 @@ const sanctum = (() => {
   const loadLimit = SAVE_DATA ? 2 : IS_TOUCH ? 3 : 5;
   const ahead = SAVE_DATA ? 8 : IS_TOUCH ? 14 : 20;
   const behind = IS_TOUCH ? 6 : 10;
-  const keep = ahead + behind + 6;
+  const keepAhead = ahead + 4;
+  const keepBehind = behind + 4;
   const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
   let state = "locked";            // locked → loading → unlocked
-  let inView = false, cur = 0, target = 0, drawn = -1, activeLoads = 0;
+  let inView = false, cur = 0, target = 0, drawn = "", activeLoads = 0;
+  let scrollStart = 0, scrollDistance = 1, loadCenter = -1, progressFrame = -1;
+
+  const measureScrollRange = (rect = null) => {
+    const r = rect || sec.getBoundingClientRect();
+    scrollStart = window.scrollY + r.top;
+    scrollDistance = Math.max(r.height - vhPx * 100, 1);
+  };
 
   const evict = () => {
     if (state !== "unlocked") return;
     const center = Math.round(target);
+    const retainAhead = inView ? keepAhead : 3;
+    const retainBehind = inView ? keepBehind : 3;
     for (let i = 0; i < S.count; i++) {
-      if (imgState[i] === 2 && Math.abs(i - center) > keep) {
+      if (imgState[i] === 2 && (i < center - retainBehind || i > center + retainAhead)) {
         imgs[i].onload = imgs[i].onerror = null;
         imgs[i].src = "";
         imgs[i] = null;
@@ -873,6 +953,11 @@ const sanctum = (() => {
     activeLoads++;
     const img = new Image();
     img.decoding = "async";
+    img._scrubKey = `sanctum-${i}`;
+    if (state === "unlocked") {
+      const distance = Math.abs(i - Math.round(target));
+      img.fetchPriority = distance <= 2 ? "high" : distance <= ahead ? "auto" : "low";
+    }
     imgs[i] = img;
     let settled = false;
     const settle = () => {
@@ -885,13 +970,17 @@ const sanctum = (() => {
       if (done) done();
     };
     const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
-    img.onload = img.onerror = settle;
+    img.onload = () => {
+      if (typeof img.decode === "function") img.decode().then(settle, settle);
+      else settle();
+    };
+    img.onerror = settle;
     img.src = name(i);
     return true;
   };
 
   const pumpWindow = () => {
-    if (state !== "unlocked") return;
+    if (state !== "unlocked" || !inView) return;
     const center = clamp(Math.round(target), 0, S.count - 1);
     while (activeLoads < loadLimit) {
       let idx = -1;
@@ -905,19 +994,24 @@ const sanctum = (() => {
           if (i >= 0 && imgState[i] === 0) { idx = i; break; }
         }
       }
-      if (idx < 0 || !loadFrame(idx, () => { drawn = -1; pumpWindow(); })) return;
+      if (idx < 0 || !loadFrame(idx, pumpWindow)) return;
     }
   };
 
   new IntersectionObserver((es) => {
     es.forEach((e) => {
       inView = e.isIntersecting;
-      if (e.isIntersecting && state === "locked") load();   // everyone gets the moment
+      if (e.isIntersecting) {
+        measureScrollRange(e.boundingClientRect);
+        if (state === "locked") load();   // everyone gets the moment
+        else if (state === "unlocked") { loadCenter = -1; pumpWindow(); }
+      } else if (state === "unlocked") evict();
     });
   }, { rootMargin: SAVE_DATA ? "240px 0px" : IS_TOUCH ? "520px 0px" : "700px 0px" }).observe(sec);
 
   const load = () => {
     state = "loading";
+    sec.classList.add("loading");
     veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
     let done = 0, next = 0;
@@ -936,14 +1030,20 @@ const sanctum = (() => {
   };
 
   const resize = () => {
+    measureScrollRange();
     const r = canvas.getBoundingClientRect();
     if (r.width < 2) return;
-    canvas.width = Math.round(r.width * DPR);
-    canvas.height = Math.round(r.height * DPR);
-    drawn = -1;
+    const nextWidth = Math.round(r.width * DPR);
+    const nextHeight = Math.round(r.height * DPR);
+    if (canvas.width === nextWidth && canvas.height === nextHeight) return;
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
+    drawn = "";
   };
 
-  const draw = (i) => {
+  const pickFrame = (i) => {
     let img = imgState[i] === 2 ? imgs[i] : null;
     if (!img) {
       for (let d = 1; d < S.count; d++) {
@@ -952,6 +1052,10 @@ const sanctum = (() => {
         if (b >= 0 && imgState[b] === 2) { img = imgs[b]; break; }
       }
     }
+    return img;
+  };
+
+  const draw = (img) => {
     if (!img || !img.naturalWidth) return false;
     if (canvas.width < 2) resize();
     const cw = canvas.width, ch = canvas.height;
@@ -964,13 +1068,18 @@ const sanctum = (() => {
   const unlock = () => {
     state = "unlocked";
     resize();
-    draw(0);
-    pumpWindow();
+    const first = pickFrame(0);
+    if (draw(first)) drawn = first._scrubKey;
+    if (inView) pumpWindow();
+    else evict();
+    sec.classList.remove("loading");
     sec.classList.add("unlocked");
     audio.bell(560, 0.5, 3.4);
     if (navigator.vibrate) navigator.vibrate([20, 60, 30]);
-    const r = sec.querySelector("#sanctum-portal").getBoundingClientRect();
-    petals.burst(r.left + r.width / 2, r.top + r.height / 3, 26);
+    setTimeout(() => {
+      const r = sec.querySelector("#sanctum-portal").getBoundingClientRect();
+      petals.burst(r.left + r.width / 2, r.top + r.height / 3, 26);
+    }, 920);
   };
 
   const tick = (dt) => {
@@ -982,53 +1091,86 @@ const sanctum = (() => {
       target = y * (S.count - 1);
     } else {
       // no hand? the scroll itself carries you through the moment
-      const r = sec.getBoundingClientRect();
-      const dist = Math.max(r.height - window.innerHeight, 1);
-      const p = clamp(-r.top / dist, 0, 1);
+      const p = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
       target = p * (S.count - 1);
     }
-    cur = lerp(cur, target, 1 - Math.exp(-dt * 6));
+    const gap = Math.abs(target - cur);
+    const response = IS_TOUCH ? (gap > 8 ? 16 : 11) : (gap > 8 ? 12 : 8);
+    cur = lerp(cur, target, 1 - Math.exp(-dt * response));
     const i = Math.round(cur);
-    pumpWindow();
-    evict();
-    if (i !== drawn && draw(i)) {
-      drawn = i;
+    const nextLoadCenter = Math.round(target);
+    if (nextLoadCenter !== loadCenter) {
+      loadCenter = nextLoadCenter;
+      pumpWindow();
+      evict();
+    }
+    const img = pickFrame(i);
+    const key = img?._scrubKey || "";
+    if (img && key !== drawn && draw(img)) drawn = key;
+    if (i !== progressFrame) {
+      progressFrame = i;
       fillEl.style.transform = `scaleX(${(i / (S.count - 1)).toFixed(3)})`;
     }
   };
   const fillEl = $("#sanctum-fill");
 
-  window.addEventListener("resize", () => { if (state === "unlocked") { resize(); drawn = -1; } });
-  return { tick };
+  return {
+    tick,
+    resize: () => { if (state === "unlocked") resize(); else if (inView) measureScrollRange(); },
+  };
 })();
 
 /* ═══════════════ DECOR PARALLAX — floating cutouts ═══════ */
 const decor = (() => {
   const els = [...document.querySelectorAll(".decor[data-depth]")].map((el) => ({
-    el, depth: parseFloat(el.dataset.depth) || 0.2, visible: false, lastY: 0,
+    el, depth: parseFloat(el.dataset.depth) || 0.2, visible: false,
+    lastY: 0, lastX: 0, docCenter: NaN,
   }));
   const itemFor = new Map(els.map((item) => [item.el, item]));
   const io = new IntersectionObserver((es) => {
     es.forEach((e) => {
       e.target.classList.toggle("shown", e.isIntersecting);
       const item = itemFor.get(e.target);
-      if (item) item.visible = e.isIntersecting;
+      if (item) {
+        item.visible = e.isIntersecting;
+        if (e.isIntersecting) {
+          item.docCenter = window.scrollY + e.boundingClientRect.top
+            + e.boundingClientRect.height / 2 - item.lastY;
+        }
+      }
     });
   }, { threshold: 0.04 });
   document.querySelectorAll(".decor, .foot-diya").forEach((el) => io.observe(el));
 
-  const tick = (tiltX) => {
-    const mid = window.innerHeight / 2;
+  let lastScroll = NaN, lastTilt = NaN;
+  const tick = (tiltX, scrollTop = window.scrollY) => {
+    if (Math.abs(scrollTop - lastScroll) < .1 && Math.abs(tiltX - lastTilt) < .002) return;
+    lastScroll = scrollTop;
+    lastTilt = tiltX;
+    const mid = vhPx * 50;
     els.forEach((item) => {
       if (!item.visible) return;
-      const r = item.el.getBoundingClientRect();
-      const untransformedTop = r.top - item.lastY;
-      const delta = (untransformedTop + r.height / 2 - mid) * -item.depth;
+      if (!Number.isFinite(item.docCenter)) {
+        const r = item.el.getBoundingClientRect();
+        item.docCenter = scrollTop + r.top + r.height / 2 - item.lastY;
+      }
+      const delta = (item.docCenter - scrollTop - mid) * -item.depth;
+      const x = tiltX * item.depth * 46;
+      if (Math.abs(delta - item.lastY) < .1 && Math.abs(x - item.lastX) < .1) return;
       item.lastY = delta;
-      item.el.style.transform = `translate3d(${(tiltX * item.depth * 46).toFixed(1)}px, ${delta.toFixed(1)}px, 0)`;
+      item.lastX = x;
+      item.el.style.transform = `translate3d(${x.toFixed(1)}px, ${delta.toFixed(1)}px, 0)`;
     });
   };
-  return { tick };
+  const resize = () => {
+    els.forEach((item) => {
+      if (!item.visible) { item.docCenter = NaN; return; }
+      const r = item.el.getBoundingClientRect();
+      item.docCenter = window.scrollY + r.top + r.height / 2 - item.lastY;
+    });
+    lastScroll = NaN;
+  };
+  return { tick, resize };
 })();
 
 /* ═══════════════ MAGIC MODE — hand tracking ══════════════ */
@@ -1353,26 +1495,59 @@ const finale = (() => {
 
 const films = (() => {
   const vids = [...document.querySelectorAll(".film-band video")];
+  const visible = new Set();
+  const timers = new WeakMap();
   const pauseAll = () => vids.forEach((v) => { if (!v.paused) v.pause(); });
   const wake = (v) => {
     if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
     if (!v.src && v.dataset.src) v.src = v.dataset.src;
     if (v.paused) v.play().catch(() => {});
   };
-  let acc = 0;
-  /* driven from the main loop — observer-independent, works in every browser */
-  const tick = (dt) => {
-    acc += dt;
-    if (acc < 0.4 || !vids.length) return;
-    acc = 0;
-    vids.forEach((v) => {
-      const r = v.getBoundingClientRect();
-      const near = r.bottom > -300 && r.top < innerHeight + 300;
-      if (near) wake(v);
-      else if (!v.paused) v.pause();
-    });
-  };
-  document.addEventListener("visibilitychange", () => { if (document.hidden) pauseAll(); });
+  let tick = () => {};
+  if ("IntersectionObserver" in window) {
+    const posterObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const v = entry.target;
+        if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
+        posterObserver.unobserve(v);
+      });
+    }, { rootMargin: "600px 0px" });
+    const playObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const v = entry.target;
+        clearTimeout(timers.get(v));
+        if (entry.isIntersecting) {
+          visible.add(v);
+          const timer = setTimeout(() => {
+            if (visible.has(v) && !document.hidden) wake(v);
+          }, IS_TOUCH ? 160 : 0);
+          timers.set(v, timer);
+        } else {
+          visible.delete(v);
+          if (!v.paused) v.pause();
+        }
+      });
+    }, { rootMargin: IS_TOUCH ? "40px 0px" : "140px 0px", threshold: 0.01 });
+    vids.forEach((v) => { posterObserver.observe(v); playObserver.observe(v); });
+  } else {
+    let acc = 0;
+    tick = (dt) => {
+      acc += dt;
+      if (acc < 0.5 || !vids.length) return;
+      acc = 0;
+      vids.forEach((v) => {
+        const r = v.getBoundingClientRect();
+        const near = r.bottom > -100 && r.top < innerHeight + 100;
+        if (near) wake(v);
+        else if (!v.paused) v.pause();
+      });
+    };
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pauseAll();
+    else visible.forEach(wake);
+  });
   addEventListener("pagehide", pauseAll);
   return { tick };
 })();
@@ -1483,6 +1658,16 @@ const films = (() => {
 
 /* ═══════════════ MAIN LOOP + FPS GUARD ═══════════════════ */
 const threadEl = $("#thread");
+const doc = document.documentElement;
+let pageScrollRange = Math.max(doc.scrollHeight - vhPx * 100, 1);
+const refreshScrollRange = () => { pageScrollRange = Math.max(doc.scrollHeight - vhPx * 100, 1); };
+const refreshPageMetrics = () => {
+  refreshScrollRange();
+  sanctum.resize();
+  decor.resize();
+};
+if ("ResizeObserver" in window) new ResizeObserver(refreshPageMetrics).observe(document.body);
+addEventListener("load", refreshPageMetrics, { once: true });
 let lastT = performance.now(), fpsAcc = 0, fpsN = 0, degraded = false, lastSp = -1;
 const mainLoop = (t) => {
   const dt = Math.min((t - lastT) / 1000, 0.05);
@@ -1492,12 +1677,11 @@ const mainLoop = (t) => {
   if (vel > 7) audio.whoosh(Math.min(vel / 26, 1));   // airy gust on brisk scrolls
   petals.step(dt);
   sanctum.tick(dt);
-  decor.tick(parallax.getTilt());
+  decor.tick(parallax.getTilt(), window.scrollY);
   films.tick(dt);
   finale.tick();
   // golden scroll thread
-  const doc = document.documentElement;
-  const sp = clamp(scrollY / Math.max(doc.scrollHeight - innerHeight, 1), 0, 1);
+  const sp = clamp(scrollY / pageScrollRange, 0, 1);
   if (Math.abs(sp - lastSp) > 0.0004) {
     threadEl.style.setProperty("--sp", sp.toFixed(4));
     lastSp = sp;
@@ -1557,13 +1741,19 @@ const mainLoop = (t) => {
     parallax.enable();
     loader.classList.add("open");
     $("#hero").classList.add("entered");     // names cascade in as the doors part
+    const warmLowFrames = () => frames.startLo();
+    if (!SAVE_DATA && "requestIdleCallback" in window) {
+      requestIdleCallback(warmLowFrames, { timeout: 520 });
+    } else {
+      setTimeout(warmLowFrames, SAVE_DATA ? 1050 : IS_TOUCH ? 260 : 0);
+    }
     setTimeout(() => {
       loader.classList.add("gone");
       $("#sound-toggle").classList.remove("hidden");
       $("#thread").classList.add("on");
       lastT = performance.now();
       RAF(mainLoop);
-      setTimeout(() => frames.startHi(), IS_TOUCH ? 250 : 0);
+      frames.startHi();
       setTimeout(() => petals.start(), IS_TOUCH ? 1100 : 0);
     }, 1500);
   }, { once: true });
