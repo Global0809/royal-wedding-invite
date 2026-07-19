@@ -227,16 +227,18 @@ const frames = (() => {
   const connection = navigator.connection || {};
   const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
   const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
-  const GATE = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 8 : 18, N);
+  // Guarantee enough decoded frames for the guest's first real swipe/wheel.
+  const GATE = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 18 : 30, N);
   const GATE_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 4;
   const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 3 : 5;
   const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 32 : 30;
   const LO_BEHIND = IS_TOUCH ? 10 : 12;
   const LO_KEEP_AHEAD = LO_AHEAD + 4;
   const LO_KEEP_BEHIND = LO_BEHIND + 4;
-  const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
+  // High frames are large (~8.5 MiB decoded each), so upgrade calmly and singly.
+  const HI_LIMIT = 1, HI_RADIUS = 1, HI_KEEP = 2;
   let loActive = 0, loStreaming = false, demandActive = true;
-  let hiActive = 0, current = 0, hiStarted = false;
+  let hiActive = 0, current = 0, hiStarted = false, hiCalm = false;
 
   const evictLo = () => {
     if (!loStreaming) return;
@@ -344,7 +346,7 @@ const frames = (() => {
   };
 
   const pumpHi = () => {
-    if (!hiEnabled || !hiStarted || !demandActive) return;
+    if (!hiEnabled || !hiStarted || !demandActive || !hiCalm) return;
     while (hiActive < HI_LIMIT) {
       let idx = -1;
       for (let d = 0; d <= HI_RADIUS; d++) {
@@ -388,7 +390,12 @@ const frames = (() => {
     },
     startHi: () => {
       if (!hiEnabled || hiStarted) return;
-      setTimeout(() => { hiStarted = true; pumpHi(); }, 1550);
+      setTimeout(() => { hiStarted = true; pumpHi(); }, 5500);
+    },
+    setHiCalm: (next) => {
+      if (hiCalm === next) return;
+      hiCalm = next;
+      if (hiCalm) pumpHi();
     },
     setDemandActive: (next) => {
       demandActive = next;
@@ -396,6 +403,7 @@ const frames = (() => {
         pumpLo();
         pumpHi();
       } else {
+        hiCalm = false;
         evictLo();
         evictHi();
       }
@@ -524,6 +532,7 @@ const scrub = (() => {
     const i = Math.round(cur);
     frames.setPlayhead(i);
     const settled = settledFrames > 2;
+    frames.setHiCalm(settledFrames > 8);
     const img = frames.get(i, settled);
     const key = img?._scrubKey || "";
     if (img && key !== drawn && draw(img)) drawn = key;
@@ -564,7 +573,7 @@ const scrub = (() => {
 /* ═══════════════ PETALS — ambient particle system ════════ */
 const petals = (() => {
   const canvas = $("#petals"), c = canvas.getContext("2d");
-  const petalDpr = IS_TOUCH ? Math.min(DPR, 1.25) : DPR;
+  let petalDpr = IS_TOUCH ? 1 : Math.min(DPR, 1.25);
   const COLORS = [
     ["#8C2B47", "#5C1428"],   // rose maroon
     ["#E5B54B", "#C9922B"],   // marigold
@@ -586,7 +595,7 @@ const petals = (() => {
     sc.fill();
     return sprite;
   });
-  let list = [], gust = 0, running = false, lowPerf = false;
+  let list = [], gust = 0, running = false, lowPerf = false, paintAcc = 0;
 
   const resize = () => {
     canvas.width = Math.round(innerWidth * petalDpr);
@@ -605,26 +614,32 @@ const petals = (() => {
       rot: Math.random() * Math.PI * 2,
       vr: (Math.random() - 0.5) * 0.04,
       sprite,
+      burst,
       life: 1,
       fade: burst ? 0.004 : 0,
     });
   };
 
-  const baseCount = () => (lowPerf ? 6 : IS_TOUCH ? 10 : 20);    // light petal drift
+  const baseCount = () => (lowPerf ? 2 : IS_TOUCH ? 4 : 8);
 
   const step = (dt) => {
     if (!running) return;
+    paintAcc += dt;
+    const interval = 1 / (lowPerf ? 18 : IS_TOUCH ? 24 : 30);
+    if (paintAcc < interval) return;
+    dt = Math.min(paintAcc, 0.06);
+    paintAcc = 0;
     c.clearRect(0, 0, canvas.width, canvas.height);
     const n = baseCount();
     if (list.length < n && Math.random() < 0.1) spawn();
-    gust *= 0.92;
+    gust *= Math.pow(0.92, dt * 60);
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
       p.ph += dt * 1.6;
       p.x += (Math.sin(p.ph) * 0.5 + p.vx) * dt * 60;
       p.y += (p.vy + gust) * dt * 60;
-      p.rot += p.vr + Math.sin(p.ph) * 0.008;
-      p.vx *= 0.97;
+      p.rot += (p.vr + Math.sin(p.ph) * 0.008) * dt * 60;
+      p.vx *= Math.pow(0.97, dt * 60);
       if (p.fade) p.life -= p.fade * dt * 600;
       if (p.y > innerHeight + 40 || p.life <= 0) { list.splice(i, 1); continue; }
       // draw petal
@@ -640,10 +655,19 @@ const petals = (() => {
 
   return {
     resize, step,
-    start: () => { running = true; },
-    addGust: (g) => { gust = clamp(gust + g, -2, 4); },
-    burst: (x, y, n = 18) => { for (let i = 0; i < n; i++) spawn(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 40, true); },
-    setLowPerf: () => { lowPerf = true; },
+    start: () => { running = true; paintAcc = 1; gust = 0; },
+    addGust: (g) => { if (running) gust = clamp(gust + g, -2, 4); },
+    burst: (x, y, n = 12) => {
+      if (!running) return;
+      const cap = lowPerf ? 6 : IS_TOUCH ? 8 : 12;
+      for (let i = 0; i < Math.min(n, cap); i++) spawn(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 40, true);
+    },
+    setLowPerf: () => {
+      lowPerf = true;
+      if (petalDpr > 1) { petalDpr = 1; resize(); }
+      let ambient = 0, transient = 0;
+      list = list.filter((p) => p.burst ? transient++ < 6 : ambient++ < 2);
+    },
   };
 })();
 
@@ -843,9 +867,9 @@ const petals = (() => {
     setTimeout(() => audio.bell(880, 0.36, 3.0), 540);
     if (navigator.vibrate) navigator.vibrate([30, 80, 30, 80, 60]);
     const r = wrap.getBoundingClientRect();
-    petals.burst(r.left + r.width / 2, r.top + r.height / 3, 26);
-    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 2, 20), 450);
-    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 4, 16), 900);
+    petals.burst(r.left + r.width / 2, r.top + r.height / 3, IS_TOUCH ? 8 : 12);
+    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 2, IS_TOUCH ? 5 : 8), 450);
+    setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 4, IS_TOUCH ? 4 : 6), 900);
   };
 
   canvas.addEventListener("pointerdown", (e) => {
@@ -1047,7 +1071,7 @@ const sanctum = (() => {
     if (navigator.vibrate) navigator.vibrate([20, 60, 30]);
     setTimeout(() => {
       const r = sec.querySelector("#sanctum-portal").getBoundingClientRect();
-      petals.burst(r.left + r.width / 2, r.top + r.height / 3, 26);
+      petals.burst(r.left + r.width / 2, r.top + r.height / 3, IS_TOUCH ? 8 : 12);
     }, 920);
   };
 
@@ -1154,7 +1178,7 @@ const sanctum = (() => {
       setTimeout(() => audio.bell(880, 0.32, 2.4), 300);
       if (navigator.vibrate) navigator.vibrate([25, 60, 40]);
       const r = modal.querySelector(".modal-sheet").getBoundingClientRect();
-      petals.burst(r.left + r.width / 2, r.top + 80, 24);
+      petals.burst(r.left + r.width / 2, r.top + 80, IS_TOUCH ? 7 : 10);
     });
   };
   $("#rsvp-btn").addEventListener("click", () => {
@@ -1401,7 +1425,7 @@ const films = (() => {
     const t = performance.now();
     if (t - lastSpark < 450 || REDUCED) return;
     lastSpark = t;
-    petals.burst(e.clientX, e.clientY, 3);
+    petals.burst(e.clientX, e.clientY, IS_TOUCH ? 1 : 2);
   }, { passive: true });
 })();
 
@@ -1513,7 +1537,8 @@ const mainLoop = (t) => {
       lastT = performance.now();
       RAF(mainLoop);
       frames.startHi();
-      setTimeout(() => petals.start(), IS_TOUCH ? 1100 : 0);
+      // Let the opening frame runway and soundtrack settle before ambient petals begin.
+      setTimeout(() => petals.start(), IS_TOUCH ? 3500 : 2500);
     }, 1500);
   }, { once: true });
 })();

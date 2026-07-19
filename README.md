@@ -34,12 +34,13 @@ Open `http://127.0.0.1:4173/`. The portal route is
 
 ## Performance behavior
 
-- Only an adaptive 6–18 low-resolution hero frames gate the opening seal. Nearby low
-  frames begin warming behind the opening doors, decode before first paint, stream
+- An adaptive 6–30 low-resolution hero frames gate the opening seal, giving the first
+  swipe a decoded runway. Nearby low frames begin warming behind the opening doors,
+  decode before first paint, stream
   with playhead-aware priority, and are evicted outside an asymmetric sliding window.
-- High-resolution hero frames use a small sliding window around the current playhead
-  and are disabled on touch devices, Save-Data, slow connections and low-memory
-  devices. Old high-resolution frames are evicted.
+- High-resolution hero frames upgrade one at a time only while the playhead is calm.
+  They are disabled on touch devices, Save-Data, slow connections and low-memory
+  devices, and old frames are evicted from a very small window.
 - Sanctum unlocks after a shorter adaptive runway, then streams through a bounded,
   evicting playhead window instead of retaining all 121 frames. Both scroll films
   use stable cached geometry so mobile browser chrome cannot jump their playheads.

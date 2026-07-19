@@ -57,11 +57,13 @@ merged and deployed.
 - Do not preload, prefetch or iframe the 3D route from the invitation.
 - Keep portal navigation in the same tab so the invitation's media/GPU work can be
   released before WebGL initializes.
-- The seal gates only an adaptive 6–18 low hero frames. Nearby low frames warm during
-  the door reveal, decode before paint, use playhead-aware priority, and are evicted
+- The seal gates an adaptive 6–30 low hero frames so the first swipe has a decoded
+  runway. Nearby low frames warm during the door reveal, decode before paint, use
+  playhead-aware priority, and are evicted
   outside an asymmetric playhead window.
-- High hero frames are desktop-only under suitable network/memory conditions and use
-  a small evicting playhead window; never restore the old all-181 high-frame sweep.
+- High hero frames are desktop-only under suitable network/memory conditions, decode
+  one at a time only while the playhead is calm, and use a tiny evicting window; never
+  restore the old all-181 high-frame sweep.
 - Sanctum unlocks after an adaptive 6–16-frame runway, then streams and evicts around
   its playhead. Both scroll films cache stable geometry, and videos remain lazy.
 - Audio permission does not reliably cross a document navigation. The portal keeps the
