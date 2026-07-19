@@ -179,18 +179,28 @@ const audio = (() => {
     return muted;
   };
 
-  const fadeForWorld = (duration = 720, preserveMusic = false) => {
+  const fadeForWorld = (duration = 720) => {
     if (ctx && master) {
       const now = ctx.currentTime;
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(master.gain.value, now);
       master.gain.linearRampToValueAtTime(0.0001, now + duration / 1000);
     }
-    if (!preserveMusic) fadeBgmTo(0, duration, true);
+    fadeBgmTo(0, duration, true);
+  };
+
+  const pauseForWorld = () => {
+    ++bgmFadeToken;
+    if (bgm) {
+      bgm.pause();
+      bgm.volume = 0;
+    }
+    if (ctx && ctx.state !== "closed") ctx.suspend().catch(() => {});
   };
 
   const restoreAfterWorld = () => {
     ++bgmFadeToken;
+    if (ctx && ctx.state !== "closed") ctx.resume().catch(() => {});
     if (ctx && master) {
       const now = ctx.currentTime;
       master.gain.cancelScheduledValues(now);
@@ -210,9 +220,8 @@ const audio = (() => {
 
   return {
     init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute,
-    fadeForWorld, restoreAfterWorld, isMuted: () => muted,
+    fadeForWorld, pauseForWorld, restoreAfterWorld, isMuted: () => muted,
     hasBgm: () => !!bgm,
-    getPlaybackTime: () => bgm && Number.isFinite(bgm.currentTime) ? bgm.currentTime : 0,
   };
 })();
 
@@ -224,14 +233,17 @@ const frames = (() => {
   const hiState = new Uint8Array(N);
   const name = (i) => CFG.frames.prefix + String(i + 1).padStart(3, "0") + CFG.frames.ext;
   const memory = Number(navigator.deviceMemory || 8);
+  const lowMemory = memory <= 2;
   const connection = navigator.connection || {};
   const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
   const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
-  // Guarantee enough decoded frames for the guest's first real swipe/wheel.
-  const GATE = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 18 : 30, N);
-  const GATE_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 4;
-  const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 3 : 5;
-  const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 32 : 30;
+  // Prepare roughly one full viewport of decoded frames before the doors open.
+  // The longer seal screen prevents a cold swipe from outrunning the runway.
+  const GATE_TARGET = SAVE_DATA ? 10 : lowMemory ? 30 : IS_TOUCH ? 44 : 54;
+  const GATE = Math.min(GATE_TARGET, N);
+  const GATE_LIMIT = SAVE_DATA ? 1 : lowMemory ? 2 : IS_TOUCH ? 3 : 5;
+  const LO_LIMIT = SAVE_DATA ? 1 : lowMemory ? 2 : IS_TOUCH ? 3 : 5;
+  const LO_AHEAD = SAVE_DATA ? 12 : lowMemory ? 34 : IS_TOUCH ? 52 : 62;
   const LO_BEHIND = IS_TOUCH ? 10 : 12;
   const LO_KEEP_AHEAD = LO_AHEAD + 4;
   const LO_KEEP_BEHIND = LO_BEHIND + 4;
@@ -299,10 +311,15 @@ const frames = (() => {
       clearTimeout(timeout);
       resolve();
     };
-    const timeout = setTimeout(finish, 10000);
+    const timeout = setTimeout(finish, 18000);
     const pumpGate = () => {
+      if (finished) return;
       while (loActive < GATE_LIMIT && next < GATE) {
         loadLo(next++, () => {
+          if (finished) {
+            if (loStreaming) pumpLo();
+            return;
+          }
           done++;
           onProgress(done / GATE);
           if (done === GATE) finish();
@@ -441,9 +458,6 @@ const frames = (() => {
 const scrub = (() => {
   const canvas = $("#scrub"), ctx2d = canvas.getContext("2d", { alpha: false });
   const hero = $("#hero");
-  const beats = [...document.querySelectorAll(".beat")];
-  const chapterEl = $("#crown-chapter");
-  let chapterIdx = -1, chapterSwapToken = 0;
   // Give each of the 181 frames enough physical scroll distance to advance
   // one-or-two frames per touch sample instead of jumping several at once.
   const SCRUB_VH = IS_TOUCH ? 450 : 340;
@@ -464,15 +478,6 @@ const scrub = (() => {
       drawn = "";
     }
   }, { rootMargin: "160px 0px" }).observe(hero);
-
-  /* beat windows in progress space: [in-start, in-end, out-start, out-end] */
-  const WINDOWS = [
-    [0.00, 0.00, 0.07, 0.16],
-    [0.20, 0.27, 0.34, 0.41],
-    [0.47, 0.54, 0.62, 0.69],
-    [0.73, 0.79, 0.85, 0.90],
-    [0.925, 0.97, 2, 2],
-  ];
 
   const resize = () => {
     const nextWidth = Math.round(canvas.clientWidth * DPR);
@@ -512,14 +517,7 @@ const scrub = (() => {
     return true;
   };
 
-  const beatOpacity = (p, [a, b, c, d]) => {
-    if (p < a || p > d) return 0;
-    if (p < b) return (p - a) / Math.max(b - a, 1e-4);
-    if (p < c) return 1;
-    return 1 - (p - c) / Math.max(d - c, 1e-4);
-  };
-
-  let progress = 0, lastBeatProgress = -1;
+  let progress = 0;
   const tick = (dt) => {
     if (!active) return 0;
     progress = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
@@ -537,29 +535,6 @@ const scrub = (() => {
     const key = img?._scrubKey || "";
     if (img && key !== drawn && draw(img)) drawn = key;
 
-    const displayProgress = clamp(cur / Math.max(frames.N - 1, 1), 0, 1);
-    if (Math.abs(displayProgress - lastBeatProgress) > .0001) {
-      let domBeat = 0, domO = -1;
-      beats.forEach((el, k) => {
-        const o = beatOpacity(displayProgress, WINDOWS[k]);
-        if (o > domO) { domO = o; domBeat = k; }
-        if (o <= 0) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
-        el.style.visibility = "visible";
-        el.style.opacity = o.toFixed(3);
-        el.style.transform = `translateY(${(1 - o) * 18}px)`;
-      });
-      // the crown chapter follows the story
-      if (domBeat !== chapterIdx) {
-        chapterIdx = domBeat;
-        chapterEl.textContent = beats[domBeat].dataset.chapter || "";
-        chapterEl.classList.remove("swap");
-        const token = ++chapterSwapToken;
-        requestAnimationFrame(() => {
-          if (token === chapterSwapToken) chapterEl.classList.add("swap");
-        });
-      }
-      lastBeatProgress = displayProgress;
-    }
     return vel;
   };
 
@@ -675,29 +650,19 @@ const petals = (() => {
 (() => {
   const tgt = new Date(CFG.wedding.dateISO).getTime();
   const el = { d: $("#cd-d"), h: $("#cd-h"), m: $("#cd-m"), s: $("#cd-s") };
-  const rollTokens = new WeakMap();
   const pad = (n) => String(n).padStart(2, "0");
-  const roll = (node, txt) => {
-    if (node.textContent === txt) return;
-    node.textContent = txt;
-    node.classList.remove("tick");
-    const token = (rollTokens.get(node) || 0) + 1;
-    rollTokens.set(node, token);
-    requestAnimationFrame(() => {
-      if (rollTokens.get(node) === token) node.classList.add("tick");
-    });
-  };
+  const set = (node, txt) => { if (node.textContent !== txt) node.textContent = txt; };
   const upd = () => {
     let ms = tgt - Date.now();
     if (ms <= 0) {
-      $("#countdown").innerHTML = `<p class="date-line" style="margin:0">॥ शुभ विवाह ॥ It's happening!</p>`;
+      $("#countdown").innerHTML = `<p class="countdown-complete">॥ शुभ विवाह ॥ Today, forever begins.</p>`;
       clearInterval(iv);
       return;
     }
-    roll(el.d, pad(ms / 864e5 | 0));
-    roll(el.h, pad((ms / 36e5 | 0) % 24));
-    roll(el.m, pad((ms / 6e4 | 0) % 60));
-    roll(el.s, pad((ms / 1e3 | 0) % 60));
+    set(el.d, pad(ms / 864e5 | 0));
+    set(el.h, pad((ms / 36e5 | 0) % 24));
+    set(el.m, pad((ms / 6e4 | 0) % 60));
+    set(el.s, pad((ms / 1e3 | 0) % 60));
   };
   const iv = setInterval(upd, 1000);
   upd();
@@ -1243,17 +1208,19 @@ const finale = (() => {
   const rememberAudioIntent = () => {
     try {
       const intent = audio.isMuted() ? "muted" : "play";
-      const state = {
-        intent,
-        currentTime: audio.getPlaybackTime(),
-        capturedAt: Date.now(),
-      };
       sessionStorage.setItem("wedding-world-audio-intent", intent);
-      sessionStorage.setItem("wedding-world-audio-state", JSON.stringify(state));
+      // The world starts its own score from the beginning; never carry this
+      // page's media time into the 3D scene.
+      sessionStorage.removeItem("wedding-world-audio-state");
     } catch { /* private modes may restrict storage; the world still opens directly */ }
   };
+  addEventListener("pagehide", audio.pauseForWorld);
   if (REDUCED) {
-    link.addEventListener("click", (e) => { if (isPrimaryActivation(e)) rememberAudioIntent(); });
+    link.addEventListener("click", (e) => {
+      if (!isPrimaryActivation(e)) return;
+      rememberAudioIntent();
+      audio.fadeForWorld(180);
+    });
     return;
   }
   let leaving = false, navTimer = 0;
@@ -1289,10 +1256,13 @@ const finale = (() => {
 
     audio.bell(540, 0.22, 1.3);
     audio.whoosh(0.9);
-    audio.fadeForWorld(720, true);
+    audio.fadeForWorld(360);
     document.querySelectorAll("video").forEach((video) => video.pause());
 
     navTimer = setTimeout(() => {
+      // Safari may keep a page alive briefly during same-tab navigation.
+      // Stop the invitation score synchronously before the world takes over.
+      audio.pauseForWorld();
       try { location.assign(link.href); }
       catch { location.href = link.href; }
     }, 820);
@@ -1494,8 +1464,8 @@ const mainLoop = (t) => {
   if (REDUCED) {
     // Reduced motion: static invitation, no film scrub, no petals
     loader.classList.add("gone");
+    document.body.classList.remove("is-loading");
     $("#hero").style.height = "calc(var(--vh) * 100)";
-    document.querySelectorAll(".beat").forEach((b, i) => { b.style.opacity = i === 0 ? 1 : 0; });
     const img = new Image();
     img.onload = () => { frames.prime(0, img); scrub.firstPaint(); };
     img.src = CFG.frames.loPath + CFG.frames.prefix + "001" + CFG.frames.ext;
@@ -1532,6 +1502,7 @@ const mainLoop = (t) => {
     frames.startLo();
     setTimeout(() => {
       loader.classList.add("gone");
+      document.body.classList.remove("is-loading");
       $("#sound-toggle").classList.remove("hidden");
       $("#thread").classList.add("on");
       lastT = performance.now();

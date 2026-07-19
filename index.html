@@ -12,9 +12,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+Devanagari:wght@400;600&family=Great+Vibes&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260719-lean">
+<link rel="stylesheet" href="styles.css?v=20260720-story">
 </head>
-<body>
+<body class="is-loading">
 
 <!-- ═══════════════ THE SEAL (loader / entry) ═══════════════ -->
 <div id="loader" aria-label="Opening invitation">
@@ -34,7 +34,7 @@
       <span class="seal-monogram">M · M</span>
       <span class="seal-rim"></span>
     </button>
-    <p id="loader-status">Preparing your invitation… <span id="loader-pct">0%</span></p>
+    <p id="loader-status">Preparing the baraat… <span id="loader-pct">0%</span></p>
     <p id="loader-tap" class="hidden">Tap the seal to open</p>
   </div>
 </div>
@@ -64,53 +64,37 @@
       <small>Udaipur · Rajasthan</small>
     </div>
 
-    <!-- Crown — monogram + living chapter name in the sky above the world -->
+    <!-- Crown — a quiet, constant signature above the unfolding world -->
     <div id="hero-crown" aria-hidden="true">
       <span class="crown-mono">M · M</span>
       <span class="crown-rule"></span>
-      <span class="crown-chapter" id="crown-chapter">The Arrival</span>
+      <span class="crown-chapter">A Royal Union</span>
     </div>
 
-    <!-- Beat 1 · Arrival -->
-    <div class="beat" data-beat="0" data-chapter="The Arrival">
+    <!-- One permanent message: the imagery moves, the invitation remains serene. -->
+    <div class="beat beat-static">
       <p class="eyebrow">॥ शुभ विवाह ॥</p>
       <h1 class="names gold-foil">Mishi <span class="amp">♥</span> Mrigank</h1>
-      <p class="date-line">Thursday · 26 November 2026 · Udaipur</p>
-      <div id="countdown" class="countdown" role="timer" aria-label="Countdown to the wedding">
-        <div class="cd-cell"><span class="cd-num" id="cd-d">–</span><span class="cd-lbl">Days</span></div>
-        <div class="cd-cell"><span class="cd-num" id="cd-h">–</span><span class="cd-lbl">Hours</span></div>
-        <div class="cd-cell"><span class="cd-num" id="cd-m">–</span><span class="cd-lbl">Mins</span></div>
-        <div class="cd-cell"><span class="cd-num" id="cd-s">–</span><span class="cd-lbl">Secs</span></div>
-      </div>
-      <div class="scroll-hint" aria-hidden="true"><span>Scroll to begin the journey</span><i class="chev"></i></div>
+      <p class="hero-vow">Two souls · Seven vows · One forever</p>
+      <div class="scroll-hint" aria-hidden="true"><span>Scroll to witness their story</span><i class="chev"></i></div>
     </div>
+  </div>
+</section>
 
-    <!-- Beat 2 · The procession -->
-    <div class="beat" data-beat="1" data-chapter="The Baraat">
-      <p class="eyebrow">Together with their families</p>
-      <h2 class="beat-title gold-foil">The baraat sets forth</h2>
-      <p class="beat-body">With hearts full of joy, the families of<br><strong>Mishi</strong> &amp; <strong>Mrigank</strong><br>request the honour of your presence.</p>
+<!-- ═══════════════ THE COUNTDOWN ═══════════════ -->
+<section id="countdown-section" aria-labelledby="countdown-title">
+  <div class="countdown-card">
+    <span class="countdown-sigil" aria-hidden="true">M · M</span>
+    <p class="eyebrow">The sacred day draws near</p>
+    <h2 id="countdown-title">Until forever begins</h2>
+    <p class="countdown-date">Thursday · 26 November 2026</p>
+    <div id="countdown" class="countdown" role="timer" aria-label="Countdown to the wedding">
+      <div class="cd-cell"><span class="cd-num" id="cd-d">–</span><span class="cd-lbl">Days</span></div>
+      <div class="cd-cell"><span class="cd-num" id="cd-h">–</span><span class="cd-lbl">Hours</span></div>
+      <div class="cd-cell"><span class="cd-num" id="cd-m">–</span><span class="cd-lbl">Mins</span></div>
+      <div class="cd-cell"><span class="cd-num" id="cd-s">–</span><span class="cd-lbl">Secs</span></div>
     </div>
-
-    <!-- Beat 3 · Ganesha -->
-    <div class="beat" data-beat="2" data-chapter="The Blessing">
-      <p class="mantra">॥ श्री गणेशाय नमः ॥</p>
-      <h2 class="beat-title gold-foil">First, His blessings</h2>
-      <p class="beat-body">Every auspicious journey begins<br>at the feet of Lord Ganesha.</p>
-    </div>
-
-    <!-- Beat 4 · The mandap -->
-    <div class="beat" data-beat="3" data-chapter="The Mandap">
-      <p class="eyebrow">Under garlands of jasmine</p>
-      <h2 class="beat-title gold-foil">Enter the mandap</h2>
-      <p class="beat-body">Where seven vows will bind<br>two families into one.</p>
-    </div>
-
-    <!-- Beat 5 · The couple -->
-    <div class="beat" data-beat="4" data-chapter="The Vows">
-      <h2 class="beat-title gold-foil big">Two souls,<br>one sacred fire</h2>
-      <p class="beat-body">Witness the moment it all begins.</p>
-    </div>
+    <p class="countdown-detail">Shubh Muhurat · 7:08 PM · Udaipur</p>
   </div>
 </section>
 
@@ -270,6 +254,6 @@
 </div>
 
 <script src="config.js?v=20260719-lean"></script>
-<script src="app.js?v=20260720-smooth"></script>
+<script src="app.js?v=20260720-story"></script>
 </body>
 </html>

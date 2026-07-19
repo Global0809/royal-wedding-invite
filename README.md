@@ -27,15 +27,16 @@ Open `http://127.0.0.1:4173/`. The portal route is
   video, canvas or library payload.
 - Reduced-motion visitors get immediate native navigation. Back navigation safely
   restores the invitation and its audio state.
-- The invitation passes sound intent and score position to the same-origin world.
-  The world opens directly and attempts the same shared track immediately; strict
+- The invitation fades and stops its own score before navigation, then passes only
+  the guest's play/mute intent to the same-origin world. The world starts its own
+  soundscape cleanly from the beginning; strict
   mobile browsers unlock it on the guest's first natural world gesture without an
   extra entry modal. The speaker button always performs a fresh trusted retry.
 
 ## Performance behavior
 
-- An adaptive 6–30 low-resolution hero frames gate the opening seal, giving the first
-  swipe a decoded runway. Nearby low frames begin warming behind the opening doors,
+- An adaptive 10–54 low-resolution hero frames gate the opening seal, giving roughly
+  the first full swipe a decoded runway. Nearby low frames begin warming behind the opening doors,
   decode before first paint, stream
   with playhead-aware priority, and are evicted outside an asymmetric sliding window.
 - High-resolution hero frames upgrade one at a time only while the playhead is calm.
@@ -53,7 +54,7 @@ Names, monogram, date, events, venue, map query, RSVP URL, blessing text and the
 live in `config.js`.
 
 To replace the hero film, extract matching WebP tiers with ffmpeg and then update
-`frames.count` in `config.js` plus the `WINDOWS` beat timings in `app.js`:
+`frames.count` in `config.js`:
 
 ```text
 ffmpeg -i film.mp4 -vf "fps=12,scale=-2:480"  -c:v libwebp -quality 55 assets/frames/lo/f_%03d.webp
@@ -66,13 +67,13 @@ folder while keeping relative asset paths.
 
 ## Main features
 
-- Scroll-scrubbed origami cinema with adaptive image quality.
+- Scroll-scrubbed origami cinema with adaptive image quality and constant invitation copy.
 - Ambient petals and lightweight wedding artwork reveals.
 - Scratch-to-reveal blessing with haptics, temple bells and a petal ceremony.
-- Hidden-moment film, event cards, films, venue, live countdown and RSVP.
+- Dedicated countdown card, hidden-moment film, event cards, films, venue and RSVP.
 - Licensed background score blended with synthesized bells and transition sounds.
 - Accessible, keyboard-operable portal with mobile-safe full-page handoff to WebGL.
-- Mobile sound gate with an explicit quiet option and a truthful playback indicator.
+- Mobile-first sound handoff with first-gesture retry and a truthful playback indicator.
 
 Append `?tick` only for automated animation-loop QA in hidden tabs; visitors do not
 need it.

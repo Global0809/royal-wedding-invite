@@ -7,13 +7,14 @@ the WebGL bundle and its soundtrack download only after a guest chooses to enter
 ## Experience map
 
 1. **The Seal** — opening loader and the required user gesture that unlocks audio.
-2. **Hero film** — 181 origami WebP frames scrubbed by scroll with story beats.
-3. **Celebrations and films** — event cards and lazy cinematic clips.
-4. **Blessing and Hidden Moment** — scratch reveal plus a scroll-driven film.
-5. **Venue and RSVP** — maps, live countdown and responsive RSVP sheet.
-6. **Finale** — names, wedding date and a Rajputana gateway into the celebration.
-7. **Portal handoff** — a short gold bloom, audio cross-fade and same-tab navigation.
-8. **3D wedding world** — the existing baraat experience, loaded only at this point.
+2. **Hero film** — 181 origami WebP frames scrubbed beneath one constant wedding message.
+3. **Countdown** — a dedicated invitation card for the wedding date and live timer.
+4. **Celebrations and films** — event cards and lazy cinematic clips.
+5. **Blessing and Hidden Moment** — scratch reveal plus a scroll-driven film.
+6. **Venue and RSVP** — maps and a responsive RSVP sheet.
+7. **Finale** — names, wedding date and a Rajputana gateway into the celebration.
+8. **Portal handoff** — a short gold bloom, clean audio handoff and same-tab navigation.
+9. **3D wedding world** — the existing baraat experience, loaded only at this point.
 
 ## File structure
 
@@ -57,7 +58,7 @@ merged and deployed.
 - Do not preload, prefetch or iframe the 3D route from the invitation.
 - Keep portal navigation in the same tab so the invitation's media/GPU work can be
   released before WebGL initializes.
-- The seal gates an adaptive 6–30 low hero frames so the first swipe has a decoded
+- The seal gates an adaptive 10–54 low hero frames so roughly the first full swipe has a decoded
   runway. Nearby low frames warm during the door reveal, decode before paint, use
   playhead-aware priority, and are evicted
   outside an asymmetric playhead window.
@@ -66,9 +67,9 @@ merged and deployed.
   restore the old all-181 high-frame sweep.
 - Sanctum unlocks after an adaptive 6–16-frame runway, then streams and evicts around
   its playhead. Both scroll films cache stable geometry, and videos remain lazy.
-- Audio permission does not reliably cross a document navigation. The portal keeps the
-  invitation score playing until navigation and passes its play state and timeline. The
-  world opens directly, attempts the same shared score at that position, and silently
+- Audio permission does not reliably cross a document navigation. The portal fades and
+  stops the invitation score, passes only play/mute intent, and lets the world start its
+  own soundscape from the beginning. The world opens directly and silently
   retries on the first natural world interaction when a mobile browser blocks autoplay.
   The persistent speaker control always performs a fresh trusted audio unlock.
 - Verify licensing for both supplied music tracks before public/commercial use.
