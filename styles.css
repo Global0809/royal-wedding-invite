@@ -150,6 +150,25 @@ body::after {
   color: var(--gold-soft);
 }
 #loader-tap { animation: fade-blink 1.8s ease-in-out infinite; }
+#loader-retry {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  z-index: 3;
+  min-height: 44px;
+  padding: 0 20px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(229,200,120,.72);
+  border-radius: 999px;
+  color: var(--gold-soft);
+  background: rgba(53,9,23,.82);
+  font: 600 11px/1 var(--serif-display);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+#loader-retry:active { background: rgba(109,26,51,.96); }
 @keyframes fade-blink { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
 
 /* ═══════════════ PETALS ═══════════════ */

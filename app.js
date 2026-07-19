@@ -302,15 +302,21 @@ const frames = (() => {
 
   /* Entry is gated on the first GATE frames only; the rest stream behind
      the opened doors. No request for the remaining frames is made up front. */
-  const preloadLo = (onProgress) => new Promise((resolve) => {
+  const preloadLo = (onProgress) => new Promise((resolve, reject) => {
     if (!GATE) { resolve(); return; }
     let next = 0, readyCount = 0, finished = false;
     const retryQueue = [];
     const attempts = new Uint8Array(GATE);
+    const MAX_GATE_ATTEMPTS = 5;
     const finish = () => {
       if (finished) return;
       finished = true;
       resolve();
+    };
+    const fail = (idx) => {
+      if (finished) return;
+      finished = true;
+      reject(new Error(`Opening frame ${idx + 1} could not be prepared`));
     };
     const queueRetry = (idx) => {
       const delay = Math.min(3200, 350 * Math.pow(1.8, Math.min(attempts[idx], 5)));
@@ -323,7 +329,7 @@ const frames = (() => {
     };
     const pumpGate = () => {
       if (finished) return;
-      while (loActive < GATE_LIMIT && (retryQueue.length || next < GATE)) {
+      while (!finished && loActive < GATE_LIMIT && (retryQueue.length || next < GATE)) {
         const idx = retryQueue.length ? retryQueue.shift() : next++;
         if (loState[idx] === 3) loState[idx] = 0;
         attempts[idx] = Math.min(attempts[idx] + 1, 20);
@@ -333,10 +339,16 @@ const frames = (() => {
             readyCount++;
             onProgress(readyCount / GATE);
             if (readyCount === GATE) { finish(); return; }
+          } else if (attempts[idx] >= MAX_GATE_ATTEMPTS) {
+            fail(idx);
+            return;
           } else queueRetry(idx);
           pumpGate();
         });
-        if (!started && loState[idx] !== 2) queueRetry(idx);
+        if (!started && loState[idx] !== 2) {
+          if (attempts[idx] >= MAX_GATE_ATTEMPTS) fail(idx);
+          else queueRetry(idx);
+        }
       }
     };
     pumpGate();
@@ -1468,6 +1480,7 @@ const mainLoop = (t) => {
   const loader = $("#loader"), sealBtn = $("#seal-btn");
   const pctEl = $("#loader-pct"), copyEl = $("#loader-copy");
   const statusEl = $("#loader-status"), tapEl = $("#loader-tap");
+  const retryEl = $("#loader-retry");
   const ring = $("#progress-ring");
   const CIRC = 414.7;
 
@@ -1491,6 +1504,7 @@ const mainLoop = (t) => {
   const slowNotice = setTimeout(() => {
     copyEl.textContent = "Smoothing every frame…";
   }, 12000);
+  retryEl.addEventListener("click", () => location.reload(), { once: true });
   frames.preloadLo((f) => {
     pctEl.textContent = Math.round(f * 100) + "%";
     ring.style.strokeDashoffset = CIRC * (1 - f);
@@ -1506,6 +1520,11 @@ const mainLoop = (t) => {
     // Use the natural pause before the seal tap to decode the opening runway.
     // The queue remains bounded, so this adds readiness rather than a bulk preload.
     if (!SAVE_DATA) frames.startLo();
+  }).catch(() => {
+    clearTimeout(slowNotice);
+    copyEl.textContent = "Preparation paused";
+    pctEl.textContent = "";
+    retryEl.classList.remove("hidden");
   });
 
   sealBtn.addEventListener("click", () => {
