@@ -288,7 +288,7 @@ const frames = (() => {
       loState[i] = img.naturalWidth ? 2 : 3;
       loActive--;
       evictLo();
-      if (done) done();
+      if (done) done(loState[i] === 2);
     };
     const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
     img.onload = () => {
@@ -304,27 +304,39 @@ const frames = (() => {
      the opened doors. No request for the remaining frames is made up front. */
   const preloadLo = (onProgress) => new Promise((resolve) => {
     if (!GATE) { resolve(); return; }
-    let next = 0, done = 0, finished = false;
+    let next = 0, readyCount = 0, finished = false;
+    const retryQueue = [];
+    const attempts = new Uint8Array(GATE);
     const finish = () => {
       if (finished) return;
       finished = true;
-      clearTimeout(timeout);
       resolve();
     };
-    const timeout = setTimeout(finish, 18000);
+    const queueRetry = (idx) => {
+      const delay = Math.min(3200, 350 * Math.pow(1.8, Math.min(attempts[idx], 5)));
+      setTimeout(() => {
+        if (finished) return;
+        if (loState[idx] === 3) loState[idx] = 0;
+        retryQueue.push(idx);
+        pumpGate();
+      }, delay);
+    };
     const pumpGate = () => {
       if (finished) return;
-      while (loActive < GATE_LIMIT && next < GATE) {
-        loadLo(next++, () => {
-          if (finished) {
-            if (loStreaming) pumpLo();
-            return;
-          }
-          done++;
-          onProgress(done / GATE);
-          if (done === GATE) finish();
-          else pumpGate();
+      while (loActive < GATE_LIMIT && (retryQueue.length || next < GATE)) {
+        const idx = retryQueue.length ? retryQueue.shift() : next++;
+        if (loState[idx] === 3) loState[idx] = 0;
+        attempts[idx] = Math.min(attempts[idx] + 1, 20);
+        const started = loadLo(idx, (ready) => {
+          if (finished) return;
+          if (ready) {
+            readyCount++;
+            onProgress(readyCount / GATE);
+            if (readyCount === GATE) { finish(); return; }
+          } else queueRetry(idx);
+          pumpGate();
         });
+        if (!started && loState[idx] !== 2) queueRetry(idx);
       }
     };
     pumpGate();
@@ -1214,17 +1226,7 @@ const finale = (() => {
       sessionStorage.removeItem("wedding-world-audio-state");
     } catch { /* private modes may restrict storage; the world still opens directly */ }
   };
-  addEventListener("pagehide", audio.pauseForWorld);
-  if (REDUCED) {
-    link.addEventListener("click", (e) => {
-      if (!isPrimaryActivation(e)) return;
-      rememberAudioIntent();
-      audio.fadeForWorld(180);
-    });
-    return;
-  }
   let leaving = false, navTimer = 0;
-
   const reset = () => {
     const shouldRestore = leaving || document.body.classList.contains("portal-opening");
     leaving = false;
@@ -1237,6 +1239,18 @@ const finale = (() => {
     overlay.style.removeProperty("--portal-y");
     if (shouldRestore) audio.restoreAfterWorld();
   };
+  addEventListener("pagehide", () => { if (leaving) audio.pauseForWorld(); });
+  addEventListener("pageshow", reset);
+
+  if (REDUCED) {
+    link.addEventListener("click", (e) => {
+      if (!isPrimaryActivation(e)) return;
+      leaving = true;
+      rememberAudioIntent();
+      audio.pauseForWorld();
+    });
+    return;
+  }
 
   link.addEventListener("click", (e) => {
     if (!isPrimaryActivation(e)) return;
@@ -1267,8 +1281,6 @@ const finale = (() => {
       catch { location.href = link.href; }
     }, 820);
   });
-
-  addEventListener("pageshow", reset);
 })();
 
 const films = (() => {
@@ -1454,7 +1466,8 @@ const mainLoop = (t) => {
 /* ═══════════════ BOOT — the seal opens ═══════════════════ */
 (() => {
   const loader = $("#loader"), sealBtn = $("#seal-btn");
-  const pctEl = $("#loader-pct"), statusEl = $("#loader-status"), tapEl = $("#loader-tap");
+  const pctEl = $("#loader-pct"), copyEl = $("#loader-copy");
+  const statusEl = $("#loader-status"), tapEl = $("#loader-tap");
   const ring = $("#progress-ring");
   const CIRC = 414.7;
 
@@ -1475,6 +1488,9 @@ const mainLoop = (t) => {
 
   const ringPetals = [...document.querySelectorAll("#petal-ring path")];
   ringPetals.forEach((p) => { p.style.opacity = .18; p.style.transition = "opacity .6s ease"; });
+  const slowNotice = setTimeout(() => {
+    copyEl.textContent = "Smoothing every frame…";
+  }, 12000);
   frames.preloadLo((f) => {
     pctEl.textContent = Math.round(f * 100) + "%";
     ring.style.strokeDashoffset = CIRC * (1 - f);
@@ -1482,6 +1498,7 @@ const mainLoop = (t) => {
     const lit = Math.round(f * ringPetals.length);
     for (let k = 0; k < lit; k++) ringPetals[k].style.opacity = 1;
   }).then(() => {
+    clearTimeout(slowNotice);
     try { scrub.firstPaint(); } catch { /* paint must never block entry */ }
     statusEl.classList.add("hidden");
     tapEl.classList.remove("hidden");
