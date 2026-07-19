@@ -650,6 +650,8 @@ section { position: relative; z-index: 5; }
   box-shadow: 0 14px 44px rgba(74,15,34,.22);
   aspect-ratio: 3 / 4;
   border: 1px solid rgba(201,162,75,.5);
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 #scratch-under { position: absolute; inset: 0; }
 #scratch-under img { width: 100%; height: 100%; object-fit: cover; }
@@ -669,12 +671,16 @@ section { position: relative; z-index: 5; }
 #scratch-foil {
   position: absolute; inset: 0;
   width: 100%; height: 100%;
-  touch-action: pan-y;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   transition: opacity .9s ease;
 }
 #scratch-foil.cleared { opacity: 0; pointer-events: none; }
 /* Celebration when the secret is revealed */
 #scratch-wrap.celebrate {
+  touch-action: pan-y;
   animation: scratch-drama 1.8s cubic-bezier(.2,.8,.3,1);
 }
 @keyframes scratch-drama {
@@ -954,7 +960,7 @@ textarea.rf-input { resize: none; }
 /* Coarse-pointer devices get the same visual hierarchy with fewer blended,
    repainted layers competing with scrolling. */
 @media (pointer: coarse) {
-  body::after { mix-blend-mode: normal; opacity: .025; }
+  body::after { display: none; }
   .hero-sticky::after {
     animation: none;
     mix-blend-mode: normal;
@@ -970,6 +976,21 @@ textarea.rf-input { resize: none; }
   }
   .event-card::after { display: none; }
   #finale::before { animation: none; }
+  .gold-foil { animation: none; background-position: 50% 0; }
+  .names,
+  .beat-title { filter: none; }
+  #hero.entered .names .ltr {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .cd-cell,
+  .cd-num.tick,
+  .chev,
+  .decor-toran { animation: none; }
+  .beat,
+  .decor { will-change: auto; }
 }
 
 /* ═══════════════ REDUCED MOTION ═══════════════ */
@@ -1036,11 +1057,22 @@ textarea.rf-input { resize: none; }
 }
 
 /* Static venue map — tappable, zero third-party weight */
-#map-link { display: block; margin-bottom: 16px; }
-#map-link img {
-  width: 100%;
-  border-radius: 14px;
+#map-link {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 16px;
+  overflow: hidden;
   border: 1px solid rgba(201,162,75,.5);
+  border-radius: 14px;
+  background: #eadfc9;
+}
+#map-link img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 54%;
   filter: sepia(.12) saturate(.92);
   transition: transform .25s ease, box-shadow .25s ease;
 }

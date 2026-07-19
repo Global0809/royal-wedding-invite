@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+Devanagari:wght@400;600&family=Great+Vibes&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260719-polish">
+<link rel="stylesheet" href="styles.css?v=20260719-mobilefix">
 </head>
 <body>
 
@@ -99,7 +99,7 @@
 </section>
 
 <!-- ═══════════════ FILM BAND 1 ═══════════════ -->
-<div class="film-band"><div class="film-inner"><video muted loop playsinline preload="none" poster="assets/film/film1_poster.webp" data-src="assets/film/film1.mp4" aria-label="Wedding film teaser"></video><p class="film-caption"><span class="film-eyebrow">The Wedding Film</span><span class="film-line">Every love story deserves cinema</span></p></div></div>
+<div class="film-band"><div class="film-inner"><video muted loop playsinline preload="none" data-poster="assets/film/film1_poster.webp" data-src="assets/film/film1.mp4" aria-label="Wedding film teaser"></video><p class="film-caption"><span class="film-eyebrow">The Wedding Film</span><span class="film-line">Every love story deserves cinema</span></p></div></div>
 
 <!-- ═══════════════ THE CELEBRATIONS ═══════════════ -->
 <section id="events">
@@ -178,7 +178,7 @@
 
 <!-- ═══════════════ VENUE & RSVP ═══════════════ -->
 <!-- ═══════════════ FILM BAND 2 ═══════════════ -->
-<div class="film-band"><div class="film-inner"><video muted loop playsinline preload="none" poster="assets/film/film2_poster.webp" data-src="assets/film/film2.mp4" aria-label="A royal affair film clip"></video><p class="film-caption"><span class="film-eyebrow">A Royal Affair</span><span class="film-line">Dressed in gold, bound by fire</span></p></div></div>
+<div class="film-band"><div class="film-inner"><video muted loop playsinline preload="none" data-poster="assets/film/film2_poster.webp" data-src="assets/film/film2.mp4" aria-label="A royal affair film clip"></video><p class="film-caption"><span class="film-eyebrow">A Royal Affair</span><span class="film-line">Dressed in gold, bound by fire</span></p></div></div>
 
 <section id="venue">
   <img class="decor decor-toran decor-toran-2" src="assets/decor/toran.webp" alt="" aria-hidden="true">
@@ -193,7 +193,7 @@
       <h3 id="venue-name">The Royal Palace Gardens</h3>
       <p id="venue-address">Lake Pichola Road, Udaipur, Rajasthan</p>
       <a id="map-link" href="#" target="_blank" rel="noopener" aria-label="Open venue location in Google Maps">
-        <img src="assets/stills/map.webp" width="1000" height="1072" alt="Map showing the venue location">
+        <img src="assets/stills/map.webp" width="1000" height="1072" loading="lazy" decoding="async" alt="Map showing the venue location">
       </a>
       <a id="maps-btn" class="btn-gold" href="#" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-6.1-7-11a7 7 0 1 1 14 0c0 4.9-7 11-7 11z"/><circle cx="12" cy="10" r="2.6"/></svg>
@@ -210,7 +210,7 @@
   <!-- ═══════════════ FILM FINALE (portrait) ═══════════════ -->
   <div class="film-band portrait">
     <div class="film-inner">
-      <video muted loop playsinline preload="none" poster="assets/film/film3_poster.webp" data-src="assets/film/film3.mp4" aria-label="The grand walk"></video>
+      <video muted loop playsinline preload="none" data-poster="assets/film/film3_poster.webp" data-src="assets/film/film3.mp4" aria-label="The grand walk"></video>
       <p class="film-caption"><span class="film-eyebrow">The Grand Walk</span><span class="film-line">Every step, toward forever</span></p>
     </div>
   </div>
@@ -267,7 +267,7 @@
   </p>
 </div>
 
-<script src="config.js?v=20260719-polish"></script>
-<script src="app.js?v=20260719-polish"></script>
+<script src="config.js?v=20260719-mobilefix"></script>
+<script src="app.js?v=20260719-mobilefix"></script>
 </body>
 </html>

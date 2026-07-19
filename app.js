@@ -10,7 +10,7 @@ const CFG = window.WEDDING_CONFIG;
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const IS_TOUCH = matchMedia("(pointer: coarse)").matches;
 const SAVE_DATA = !!(navigator.connection && navigator.connection.saveData);
-const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const DPR = Math.min(window.devicePixelRatio || 1, IS_TOUCH ? 1.5 : 2);
 const $ = (s) => document.querySelector(s);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -174,14 +174,14 @@ const audio = (() => {
     return muted;
   };
 
-  const fadeForWorld = (duration = 720) => {
+  const fadeForWorld = (duration = 720, preserveMusic = false) => {
     if (ctx && master) {
       const now = ctx.currentTime;
       master.gain.cancelScheduledValues(now);
       master.gain.setValueAtTime(master.gain.value, now);
       master.gain.linearRampToValueAtTime(0.0001, now + duration / 1000);
     }
-    fadeBgmTo(0, duration, true);
+    if (!preserveMusic) fadeBgmTo(0, duration, true);
   };
 
   const restoreAfterWorld = () => {
@@ -207,6 +207,7 @@ const audio = (() => {
     init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute,
     fadeForWorld, restoreAfterWorld, isMuted: () => muted,
     hasBgm: () => !!bgm,
+    getPlaybackTime: () => bgm && Number.isFinite(bgm.currentTime) ? bgm.currentTime : 0,
   };
 })();
 
@@ -221,10 +222,10 @@ const frames = (() => {
   const connection = navigator.connection || {};
   const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
   const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
-  const GATE = Math.min(SAVE_DATA ? 8 : IS_TOUCH ? 14 : 22, N);
-  const LO_LIMIT = SAVE_DATA ? 2 : IS_TOUCH ? 4 : 6;
-  const LO_AHEAD = SAVE_DATA ? 12 : IS_TOUCH ? 22 : 30;
-  const LO_BEHIND = IS_TOUCH ? 10 : 14;
+  const GATE = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 8 : 18, N);
+  const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 5;
+  const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 18 : 26;
+  const LO_BEHIND = IS_TOUCH ? 8 : 12;
   const LO_KEEP = LO_AHEAD + LO_BEHIND + 8;
   const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
   let loActive = 0, loStreaming = false;
@@ -250,6 +251,7 @@ const frames = (() => {
     loActive++;
     const img = new Image();
     img.decoding = "async";
+    if (loStreaming) img.fetchPriority = "low";
     lo[i] = img;
     let settled = false;
     const settle = () => {
@@ -543,7 +545,7 @@ const petals = (() => {
     });
   };
 
-  const baseCount = () => (lowPerf ? 8 : IS_TOUCH ? 16 : 26);    // light petal drift
+  const baseCount = () => (lowPerf ? 6 : IS_TOUCH ? 10 : 20);    // light petal drift
 
   const step = (dt) => {
     if (!running) return;
@@ -678,13 +680,14 @@ const parallax = (() => {
   $("#scratch-heading").textContent = CFG.scratch.heading;
   $("#scratch-message").textContent = CFG.scratch.message;
 
-  const canvas = $("#scratch-foil"), c = canvas.getContext("2d", { willReadFrequently: true });
+  const canvas = $("#scratch-foil"), c = canvas.getContext("2d");
   const wrap = $("#scratch-wrap");
-  let painted = false, cleared = false, strokes = 0;
+  let painted = false, cleared = false, strokes = 0, foilW = 0, foilH = 0;
 
   const paintFoil = () => {
-    const w = canvas.width = wrap.clientWidth * DPR;
-    const h = canvas.height = wrap.clientHeight * DPR;
+    foilW = wrap.clientWidth; foilH = wrap.clientHeight;
+    const w = canvas.width = foilW * DPR;
+    const h = canvas.height = foilH * DPR;
     const g = c.createLinearGradient(0, 0, w * 0.3, h);
     g.addColorStop(0, "#D9B45C"); g.addColorStop(0.35, "#B8923B");
     g.addColorStop(0.55, "#EBD292"); g.addColorStop(0.8, "#C09A40");
@@ -693,7 +696,7 @@ const parallax = (() => {
     c.fillRect(0, 0, w, h);
     // speckle texture
     c.globalAlpha = 0.12;
-    for (let i = 0; i < 900; i++) {
+    for (let i = 0, count = IS_TOUCH ? 320 : 600; i < count; i++) {
       c.fillStyle = Math.random() > 0.5 ? "#fff" : "#6b5215";
       c.fillRect(Math.random() * w, Math.random() * h, 2, 2);
     }
@@ -712,12 +715,19 @@ const parallax = (() => {
     c.fillText("🪙", w / 2, h / 2 + 26 * DPR);
     painted = true;
   };
-  paintFoil();
+  const prepareFoil = () => { if (!painted && !cleared) paintFoil(); };
+  if ("IntersectionObserver" in window) {
+    const foilObserver = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      prepareFoil();
+      foilObserver.disconnect();
+    }, { rootMargin: "700px 0px" });
+    foilObserver.observe(wrap);
+  } else setTimeout(prepareFoil, 0);
   /* Repaint only on REAL size changes (rotation) — a repaint wipes scratch
      progress, and mobile URL-bar collapse fires tiny resizes constantly. */
-  let foilW = wrap.clientWidth, foilH = wrap.clientHeight;
   new ResizeObserver(() => {
-    if (cleared || strokes > 0) return;   // never wipe scratch progress
+    if (!painted || cleared || strokes > 0) return;   // never wipe scratch progress
     const dw = Math.abs(wrap.clientWidth - foilW), dh = Math.abs(wrap.clientHeight - foilH);
     if (dw < 24 && dh < 24) return;
     foilW = wrap.clientWidth; foilH = wrap.clientHeight;
@@ -756,7 +766,7 @@ const parallax = (() => {
     return scratchedCells / scratched.length > .55;
   };
 
-  let last = null, scratchRect = null;
+  let last = null, scratchRect = null, activePointer = null;
   const DBG = /[?&]tick/.test(location.search) ? (window.__scratchDbg = { calls: 0, drawn: 0, blocked: "" }) : null;
   const scratch = (e) => {
     if (DBG) DBG.calls++;
@@ -766,7 +776,7 @@ const parallax = (() => {
     const x = (e.clientX - r.left) * (canvas.width / r.width);
     const y = (e.clientY - r.top) * (canvas.height / r.height);
     c.globalCompositeOperation = "destination-out";
-    c.lineWidth = 54 * DPR / 2;
+    c.lineWidth = 46 * DPR;
     c.lineCap = "round";
     c.beginPath();
     if (last) c.moveTo(last.x, last.y); else c.moveTo(x - 0.1, y);
@@ -795,13 +805,23 @@ const parallax = (() => {
   };
 
   canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    prepareFoil();
     try { canvas.setPointerCapture(e.pointerId); } catch {}
+    activePointer = e.pointerId;
     scratchRect = canvas.getBoundingClientRect();
     last = null;
     scratch(e);
-  });
-  canvas.addEventListener("pointermove", (e) => { if (e.buttons) scratch(e); });
-  ["pointerup", "pointercancel"].forEach((eventName) => canvas.addEventListener(eventName, () => {
+  }, { passive: false });
+  canvas.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== activePointer) return;
+    e.preventDefault();
+    const coalesced = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : null;
+    const samples = coalesced?.length ? coalesced : [e];
+    samples.forEach(scratch);
+  }, { passive: false });
+  ["pointerup", "pointercancel", "lostpointercapture"].forEach((eventName) => canvas.addEventListener(eventName, () => {
+    activePointer = null;
     last = null;
     scratchRect = null;
   }));
@@ -825,10 +845,10 @@ const sanctum = (() => {
   const progressEl = $("#sanctum-progress"), veilText = $("#sanctum-veil-text");
   const imgs = new Array(S.count);
   const imgState = new Uint8Array(S.count);
-  const gateCount = Math.min(SAVE_DATA ? 8 : IS_TOUCH ? 14 : 20, S.count);
-  const loadLimit = SAVE_DATA ? 2 : IS_TOUCH ? 4 : 6;
-  const ahead = SAVE_DATA ? 10 : IS_TOUCH ? 18 : 24;
-  const behind = IS_TOUCH ? 8 : 12;
+  const gateCount = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 10 : 16, S.count);
+  const loadLimit = SAVE_DATA ? 2 : IS_TOUCH ? 3 : 5;
+  const ahead = SAVE_DATA ? 8 : IS_TOUCH ? 14 : 20;
+  const behind = IS_TOUCH ? 6 : 10;
   const keep = ahead + behind + 6;
   const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
   let state = "locked";            // locked → loading → unlocked
@@ -1272,8 +1292,15 @@ const finale = (() => {
     && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
   const rememberAudioIntent = () => {
     try {
-      sessionStorage.setItem("wedding-world-audio-intent", audio.isMuted() ? "muted" : "play");
-    } catch { /* private modes may restrict storage; the world still shows its sound gate */ }
+      const intent = audio.isMuted() ? "muted" : "play";
+      const state = {
+        intent,
+        currentTime: audio.getPlaybackTime(),
+        capturedAt: Date.now(),
+      };
+      sessionStorage.setItem("wedding-world-audio-intent", intent);
+      sessionStorage.setItem("wedding-world-audio-state", JSON.stringify(state));
+    } catch { /* private modes may restrict storage; the world still opens directly */ }
   };
   if (REDUCED) {
     link.addEventListener("click", (e) => { if (isPrimaryActivation(e)) rememberAudioIntent(); });
@@ -1312,7 +1339,7 @@ const finale = (() => {
 
     audio.bell(540, 0.22, 1.3);
     audio.whoosh(0.9);
-    audio.fadeForWorld(720);
+    audio.fadeForWorld(720, true);
     document.querySelectorAll("video").forEach((video) => video.pause());
 
     navTimer = setTimeout(() => {
@@ -1328,6 +1355,7 @@ const films = (() => {
   const vids = [...document.querySelectorAll(".film-band video")];
   const pauseAll = () => vids.forEach((v) => { if (!v.paused) v.pause(); });
   const wake = (v) => {
+    if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
     if (!v.src && v.dataset.src) v.src = v.dataset.src;
     if (v.paused) v.play().catch(() => {});
   };
@@ -1533,10 +1561,11 @@ const mainLoop = (t) => {
       loader.classList.add("gone");
       $("#sound-toggle").classList.remove("hidden");
       $("#thread").classList.add("on");
-      petals.start();
+      lastT = performance.now();
+      RAF(mainLoop);
+      setTimeout(() => frames.startHi(), IS_TOUCH ? 250 : 0);
+      setTimeout(() => petals.start(), IS_TOUCH ? 1100 : 0);
     }, 1500);
-    frames.startHi();
-    RAF(mainLoop);
   }, { once: true });
 })();
 

@@ -27,18 +27,19 @@ Open `http://127.0.0.1:4173/`. The portal route is
   video, canvas or library payload.
 - Reduced-motion visitors get immediate native navigation. Back navigation safely
   restores the invitation and its audio state.
-- The invitation passes sound intent to the same-origin world. Browsers that allow
-  it begin automatically; mobile Safari and other strict browsers receive a small
-  in-world `Enter with wedding music` gesture instead of silently failing.
+- The invitation passes sound intent and score position to the same-origin world.
+  The world opens directly and attempts the same shared track immediately; strict
+  mobile browsers unlock it on the guest's first natural world gesture without an
+  extra entry modal. The speaker button always performs a fresh trusted retry.
 
 ## Performance behavior
 
-- Only an adaptive 8–22 low-resolution hero frames gate the opening seal. Nearby low
+- Only an adaptive 6–18 low-resolution hero frames gate the opening seal. Nearby low
   frames stream with bounded concurrency after entry and old frames are evicted.
 - High-resolution hero frames use a small sliding window around the current playhead
   and are disabled on touch devices, Save-Data, slow connections and low-memory
   devices. Old high-resolution frames are evicted.
-- Sanctum unlocks after a short adaptive runway, then streams through a bounded,
+- Sanctum unlocks after a shorter adaptive runway, then streams through a bounded,
   evicting playhead window instead of retaining all 121 frames.
 - Film clips remain lazy and play only near the viewport. Magic Mode and MediaPipe
   remain opt-in and load only when requested.

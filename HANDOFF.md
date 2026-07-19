@@ -57,16 +57,17 @@ merged and deployed.
 - Do not preload, prefetch or iframe the 3D route from the invitation.
 - Keep portal navigation in the same tab so the invitation's media/GPU work can be
   released before WebGL initializes.
-- The seal gates only an adaptive 8–22 low hero frames. Nearby low frames stream after
+- The seal gates only an adaptive 6–18 low hero frames. Nearby low frames stream after
   entry through a bounded queue and are evicted outside the playhead window.
 - High hero frames are desktop-only under suitable network/memory conditions and use
   a small evicting playhead window; never restore the old all-181 high-frame sweep.
-- Sanctum unlocks after an adaptive 8–20-frame runway, then streams and evicts around
+- Sanctum unlocks after an adaptive 6–16-frame runway, then streams and evicts around
   its playhead. Videos and MediaPipe remain lazy.
-- Audio permission does not reliably cross a document navigation. The portal stores
-  only play/mute intent; the world attempts same-origin playback and, when a mobile
-  browser blocks it, retains its loader as an `Enter with wedding music` sound gate.
-  `Continue quietly` and the persistent speaker control remain available.
+- Audio permission does not reliably cross a document navigation. The portal keeps the
+  invitation score playing until navigation and passes its play state and timeline. The
+  world opens directly, attempts the same shared score at that position, and silently
+  retries on the first natural world interaction when a mobile browser blocks autoplay.
+  The persistent speaker control always performs a fresh trusted audio unlock.
 - Verify licensing for both supplied music tracks before public/commercial use.
 
 ## Portal implementation notes
