@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════════
    ROYAL WEDDING INVITE — ENGINE
-   Frame-scrub cinema · petals · gyro parallax · scratch card
-   hand-tracking magic mode · synth bells · countdown · RSVP
+   Frame-scrub cinema · petals · scratch card
+   synth bells · countdown · RSVP · 3D-world portal
    ═══════════════════════════════════════════════════════════ */
 (() => {
 "use strict";
@@ -45,7 +45,6 @@ const remeasure = () => {
   scrub.resize();
   petals.resize();
   sanctum.resize();
-  decor.resize();
 };
 window.addEventListener("resize", () => {
   // On touch devices ignore height-only resizes (URL bar collapse)
@@ -440,7 +439,7 @@ const scrub = (() => {
   // Give each of the 181 frames enough physical scroll distance to advance
   // one-or-two frames per touch sample instead of jumping several at once.
   const SCRUB_VH = IS_TOUCH ? 450 : 340;
-  let cur = 0, target = 0, drawn = "", tiltX = 0, settledFrames = 0, active = true;
+  let cur = 0, target = 0, drawn = "", settledFrames = 0, active = true;
   let scrollStart = 0, scrollDistance = 1, backdropKey = "";
 
   const measureScrollRange = () => {
@@ -492,9 +491,8 @@ const scrub = (() => {
     // The world floats above the page; the CSS vignette feathers its edges.
     const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
     const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
-    const px = tiltX * 9 * DPR;
     const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
-    const x = Math.round((cw - w) / 2 + px);
+    const x = Math.round((cw - w) / 2);
     const y = Math.round(py);
     const nextBackdropKey = `${x}:${y}:${w}:${h}`;
     if (nextBackdropKey !== backdropKey) {
@@ -558,7 +556,6 @@ const scrub = (() => {
 
   return {
     resize, tick,
-    setTilt: (x) => { if (Math.abs(x - tiltX) > .002) { tiltX = x; drawn = ""; } },
     getProgress: () => progress,
     firstPaint: () => draw(frames.get(0, false)),
   };
@@ -589,8 +586,7 @@ const petals = (() => {
     sc.fill();
     return sprite;
   });
-  let list = [], wind = 0, gust = 0, running = false, lowPerf = false;
-  let attractor = null;       // {x,y} from hand tracking
+  let list = [], gust = 0, running = false, lowPerf = false;
 
   const resize = () => {
     canvas.width = Math.round(innerWidth * petalDpr);
@@ -625,15 +621,10 @@ const petals = (() => {
     for (let i = list.length - 1; i >= 0; i--) {
       const p = list[i];
       p.ph += dt * 1.6;
-      p.x += (Math.sin(p.ph) * 0.5 + wind + p.vx) * dt * 60;
+      p.x += (Math.sin(p.ph) * 0.5 + p.vx) * dt * 60;
       p.y += (p.vy + gust) * dt * 60;
       p.rot += p.vr + Math.sin(p.ph) * 0.008;
       p.vx *= 0.97;
-      if (attractor) {
-        const dx = attractor.x - p.x, dy = attractor.y - p.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < 90000) { p.vx += dx * 0.0004 * dt * 60; p.vy += dy * 0.00025 * dt * 60; }
-      }
       if (p.fade) p.life -= p.fade * dt * 600;
       if (p.y > innerHeight + 40 || p.life <= 0) { list.splice(i, 1); continue; }
       // draw petal
@@ -650,30 +641,10 @@ const petals = (() => {
   return {
     resize, step,
     start: () => { running = true; },
-    setWind: (w) => { wind = w; },
     addGust: (g) => { gust = clamp(gust + g, -2, 4); },
-    setAttractor: (pt) => { attractor = pt; },
     burst: (x, y, n = 18) => { for (let i = 0; i < n; i++) spawn(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 40, true); },
-    trail: (x, y) => { if (list.length < 46) spawn(x, y, true); },
     setLowPerf: () => { lowPerf = true; },
   };
-})();
-
-/* ═══════════════ GYRO / MOUSE PARALLAX ═══════════════════ */
-const parallax = (() => {
-  let tilt = 0;
-  const apply = (t) => {
-    tilt = clamp(t, -1, 1);
-    scrub.setTilt(tilt);
-    petals.setWind(tilt * 1.4);
-  };
-  const enable = () => {
-    if (REDUCED || IS_TOUCH) return;         // gyro removed by design; desktop gets mouse drift
-    window.addEventListener("mousemove", (e) => {
-      apply((e.clientX / innerWidth - 0.5) * 1.6);
-    }, { passive: true });
-  };
-  return { enable, getTilt: () => tilt };
 })();
 
 /* ═══════════════ COUNTDOWN ═══════════════════════════════ */
@@ -900,12 +871,7 @@ const parallax = (() => {
   }));
 })();
 
-/* ═══════════════ MAGIC BUS — hand state shared between
-   Magic Mode (writer) and the Sanctum (reader) ════════════ */
-const magicBus = { active: false, handY: null, captured: false };
-if (/[?&]tick/.test(location.search)) window.__magicBus = magicBus;   // QA hook
-
-/* ═══════════════ SANCTUM — the hand-unlocked hidden film ═ */
+/* ═══════════════ SANCTUM — scroll-unlocked hidden film ═══ */
 const sanctum = (() => {
   const sec = $("#sanctum");
   if (!sec) return { tick: () => {}, resize: () => {} };
@@ -1086,17 +1052,9 @@ const sanctum = (() => {
   };
 
   const tick = (dt) => {
-    magicBus.captured = state === "unlocked" && inView && magicBus.active && magicBus.handY != null;
     if (state !== "unlocked" || !inView) return;
-    if (magicBus.captured) {
-      // palm height conducts the film: lower the palm = fold back, raise = unfold
-      const y = clamp((0.82 - magicBus.handY) / 0.64, 0, 1);
-      target = y * (S.count - 1);
-    } else {
-      // no hand? the scroll itself carries you through the moment
-      const p = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
-      target = p * (S.count - 1);
-    }
+    const p = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
+    target = p * (S.count - 1);
     const gap = Math.abs(target - cur);
     const response = IS_TOUCH ? (gap > 8 ? 16 : 11) : (gap > 8 ? 12 : 8);
     cur = lerp(cur, target, 1 - Math.exp(-dt * response));
@@ -1123,191 +1081,14 @@ const sanctum = (() => {
   };
 })();
 
-/* ═══════════════ DECOR PARALLAX — floating cutouts ═══════ */
-const decor = (() => {
-  const els = [...document.querySelectorAll(".decor[data-depth]")].map((el) => ({
-    el, depth: parseFloat(el.dataset.depth) || 0.2, visible: false,
-    lastY: 0, lastX: 0, docCenter: NaN,
-  }));
-  const itemFor = new Map(els.map((item) => [item.el, item]));
+/* ═══════════════ DECOR REVEAL — no per-frame parallax ════ */
+(() => {
   const io = new IntersectionObserver((es) => {
     es.forEach((e) => {
       e.target.classList.toggle("shown", e.isIntersecting);
-      const item = itemFor.get(e.target);
-      if (item) {
-        item.visible = e.isIntersecting;
-        if (e.isIntersecting) {
-          item.docCenter = window.scrollY + e.boundingClientRect.top
-            + e.boundingClientRect.height / 2 - item.lastY;
-        }
-      }
     });
   }, { threshold: 0.04 });
   document.querySelectorAll(".decor, .foot-diya").forEach((el) => io.observe(el));
-
-  let lastScroll = NaN, lastTilt = NaN;
-  const tick = (tiltX, scrollTop = window.scrollY) => {
-    if (Math.abs(scrollTop - lastScroll) < .1 && Math.abs(tiltX - lastTilt) < .002) return;
-    lastScroll = scrollTop;
-    lastTilt = tiltX;
-    const mid = vhPx * 50;
-    els.forEach((item) => {
-      if (!item.visible) return;
-      if (!Number.isFinite(item.docCenter)) {
-        const r = item.el.getBoundingClientRect();
-        item.docCenter = scrollTop + r.top + r.height / 2 - item.lastY;
-      }
-      const delta = (item.docCenter - scrollTop - mid) * -item.depth;
-      const x = tiltX * item.depth * 46;
-      if (Math.abs(delta - item.lastY) < .1 && Math.abs(x - item.lastX) < .1) return;
-      item.lastY = delta;
-      item.lastX = x;
-      item.el.style.transform = `translate3d(${x.toFixed(1)}px, ${delta.toFixed(1)}px, 0)`;
-    });
-  };
-  const resize = () => {
-    els.forEach((item) => {
-      if (!item.visible) { item.docCenter = NaN; return; }
-      const r = item.el.getBoundingClientRect();
-      item.docCenter = window.scrollY + r.top + r.height / 2 - item.lastY;
-    });
-    lastScroll = NaN;
-  };
-  return { tick, resize };
-})();
-
-/* ═══════════════ MAGIC MODE — hand tracking ══════════════ */
-(() => {
-  const btn = $("#magic-toggle"), status = $("#magic-status"), cam = $("#magic-cam");
-  const hud = $("#magic-hud"), hudCanvas = $("#hud-canvas");
-  const hudCtx = hudCanvas.getContext("2d");
-  const BONES = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
-  const drawHud = (lm) => {
-    const w = hudCanvas.width = hudCanvas.clientWidth * 2;
-    const h = hudCanvas.height = hudCanvas.clientHeight * 2;
-    if (!lm) return;
-    hudCtx.strokeStyle = "rgba(229,200,120,.9)";
-    hudCtx.fillStyle = "#F6E7B6";
-    hudCtx.lineWidth = 2;
-    BONES.forEach(([a, b]) => {
-      hudCtx.beginPath();
-      hudCtx.moveTo(lm[a].x * w, lm[a].y * h);
-      hudCtx.lineTo(lm[b].x * w, lm[b].y * h);
-      hudCtx.stroke();
-    });
-    lm.forEach((p) => {
-      hudCtx.beginPath();
-      hudCtx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
-      hudCtx.fill();
-    });
-  };
-  let on = false, loading = false, stream = null, landmarker = null, rafId = 0, lastVideoTime = -1;
-  let scrollVel = 0;
-  btn.setAttribute("aria-pressed", "false");
-
-  const say = (msg) => { status.textContent = msg; status.classList.remove("hidden"); };
-
-  const stop = () => {
-    on = false;
-    magicBus.active = false;
-    magicBus.handY = null;
-    btn.classList.remove("on");
-    btn.setAttribute("aria-pressed", "false");
-    btn.querySelector(".magic-label").textContent = "Enable Magic Mode";
-    btn.querySelector(".magic-sub").textContent = "Wave your hand — the page follows";
-    cancelAnimationFrame(rafId);
-    petals.setAttractor(null);
-    if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
-    hud.classList.remove("live");
-    status.classList.add("hidden");
-    scrollVel = 0;
-  };
-
-  const loop = () => {
-    if (!on) return;
-    rafId = requestAnimationFrame(loop);
-    if (!landmarker || cam.readyState < 2 || cam.currentTime === lastVideoTime) {
-      window.scrollBy(0, scrollVel *= 0.94);
-      return;
-    }
-    lastVideoTime = cam.currentTime;
-    const res = landmarker.detectForVideo(cam, performance.now());
-    drawHud(res.landmarks && res.landmarks[0]);
-    if (res.landmarks && res.landmarks.length) {
-      const tip = res.landmarks[0][9];        // palm centre
-      const x = (1 - tip.x) * innerWidth;     // mirror
-      const y = tip.y * innerHeight;
-      magicBus.handY = tip.y;
-      petals.setAttractor({ x, y });
-      petals.trail(x, y);
-      if (magicBus.captured) {
-        // the Sanctum holds the hand — no page scrolling, pure film scrubbing
-        scrollVel = lerp(scrollVel, 0, 0.3);
-        say("🪷 The moment is in your hand — raise it to unfold");
-      } else {
-        // vertical hand position drives scroll
-        if (tip.y < 0.4)      scrollVel = lerp(scrollVel, -(0.4 - tip.y) * 46, 0.18);
-        else if (tip.y > 0.6) scrollVel = lerp(scrollVel,  (tip.y - 0.6) * 46, 0.18);
-        else                  scrollVel = lerp(scrollVel, 0, 0.2);
-        say(tip.y < 0.4 ? "🖐 Rising…" : tip.y > 0.6 ? "🖐 Descending…" : "🖐 Hold — petals follow your hand");
-      }
-    } else {
-      magicBus.handY = null;
-      petals.setAttractor(null);
-      scrollVel = lerp(scrollVel, 0, 0.1);
-      say("Show your palm to the camera ✋");
-    }
-    if (Math.abs(scrollVel) > 0.3 && !magicBus.captured) window.scrollBy(0, scrollVel);
-  };
-
-  btn.addEventListener("click", async () => {
-    if (on) { stop(); return; }
-    if (loading) return;
-    loading = true;
-    btn.disabled = true;
-    btn.setAttribute("aria-busy", "true");
-    try {
-      say("Summoning the magic… ✨");
-      btn.querySelector(".magic-label").textContent = "Loading…";
-      const vision = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs");
-      const files = await vision.FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
-      landmarker = landmarker || await vision.HandLandmarker.createFromOptions(files, {
-        baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-          delegate: "GPU",
-        },
-        runningMode: "VIDEO",
-        numHands: 1,
-      });
-      stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 320, height: 240, facingMode: "user" },
-      });
-      cam.srcObject = stream;
-      await cam.play();
-      on = true;
-      btn.classList.add("on");
-      btn.setAttribute("aria-pressed", "true");
-      btn.querySelector(".magic-label").textContent = "Magic Mode On";
-      btn.querySelector(".magic-sub").textContent = "Tap again to turn off";
-      hud.classList.add("live");
-      magicBus.active = true;
-      say("Show your palm to the camera ✋");
-      audio.chime();
-      loop();
-    } catch (err) {
-      stop();
-      say(err.name === "NotAllowedError"
-        ? "No camera, no problem — just scroll: the moment unfolds anyway. Tap to retry magic."
-        : "Magic unavailable here — but scroll on: the moment unfolds with your scroll.");
-      btn.querySelector(".magic-label").textContent = "Enable Magic Mode";
-    } finally {
-      loading = false;
-      btn.disabled = false;
-      btn.removeAttribute("aria-busy");
-    }
-  });
-  addEventListener("pagehide", stop);
 })();
 
 /* ═══════════════ VENUE + RSVP ════════════════════════════ */
@@ -1614,26 +1395,6 @@ const films = (() => {
   }, { threshold: 0.5 });
   document.querySelectorAll(".sec-head").forEach((h) => headIO.observe(h));
 
-  /* Holographic tilt + sheen on event cards (touch/pointer driven) */
-  document.getElementById("event-cards").addEventListener("pointermove", (e) => {
-    const card = e.target.closest(".event-card");
-    if (!card || REDUCED || IS_TOUCH) return;
-    const r = card.getBoundingClientRect();
-    const fx = clamp((e.clientX - r.left) / r.width, 0, 1);
-    const fy = clamp((e.clientY - r.top) / r.height, 0, 1);
-    card.style.animationPlayState = "paused";
-    card.style.transform =
-      `perspective(700px) rotateY(${(fx - 0.5) * 7}deg) rotateX(${(0.5 - fy) * 6}deg) translateY(-2px)`;
-    card.style.setProperty("--shx", (fx * 100).toFixed(1) + "%");
-  }, { passive: true });
-  ["pointerleave", "pointerup", "pointercancel"].forEach((ev) =>
-    document.getElementById("event-cards").addEventListener(ev, (e) => {
-      const card = e.target.closest(".event-card");
-      if (!card) return;
-      card.style.transform = "";
-      card.style.animationPlayState = "";
-    }, { passive: true }));
-
   /* Tap sparkle — a pinch of petals wherever a finger lands */
   let lastSpark = 0;
   document.addEventListener("pointerdown", (e) => {
@@ -1667,7 +1428,6 @@ const refreshScrollRange = () => { pageScrollRange = Math.max(doc.scrollHeight -
 const refreshPageMetrics = () => {
   refreshScrollRange();
   sanctum.resize();
-  decor.resize();
 };
 if ("ResizeObserver" in window) new ResizeObserver(refreshPageMetrics).observe(document.body);
 addEventListener("load", refreshPageMetrics, { once: true });
@@ -1680,7 +1440,6 @@ const mainLoop = (t) => {
   if (vel > 7) audio.whoosh(Math.min(vel / 26, 1));   // airy gust on brisk scrolls
   petals.step(dt);
   sanctum.tick(dt);
-  decor.tick(parallax.getTilt(), window.scrollY);
   films.tick(dt);
   finale.tick();
   // golden scroll thread
@@ -1744,7 +1503,6 @@ const mainLoop = (t) => {
     setTimeout(() => audio.bell(648, 0.3, 3), 350);
     audio.whoosh(1);                         // doors part with a breath of air
     audio.startBgm();                        // the score begins inside the tap gesture
-    parallax.enable();
     loader.classList.add("open");
     $("#hero").classList.add("entered");     // names cascade in as the doors part
     frames.startLo();

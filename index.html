@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Noto+Serif+Devanagari:wght@400;600&family=Great+Vibes&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260719-sidecopy">
+<link rel="stylesheet" href="styles.css?v=20260719-lean">
 </head>
 <body>
 
@@ -117,8 +117,8 @@
 <!-- ═══════════════ THE CELEBRATIONS ═══════════════ -->
 <section id="events">
   <img loading="lazy" class="decor decor-toran" src="assets/decor/toran.webp" alt="" aria-hidden="true">
-  <img loading="lazy" class="decor decor-elephant" data-depth="0.22" src="assets/decor/elephant.webp" alt="" aria-hidden="true">
-  <img loading="lazy" class="decor decor-umbrella" data-depth="0.38" src="assets/decor/umbrella.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-elephant" src="assets/decor/elephant.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-umbrella" src="assets/decor/umbrella.webp" alt="" aria-hidden="true">
   <header class="sec-head">
     <p class="eyebrow">Four days of festivity</p>
     <h2 class="sec-title gold-foil">The Celebrations</h2>
@@ -129,7 +129,7 @@
 <!-- ═══════════════ FILM BAND 1 ═══════════════ -->
 <div class="film-band"><div class="film-inner"><video muted loop playsinline preload="none" data-poster="assets/film/film1_poster.webp" data-src="assets/film/film1.mp4" aria-label="Wedding film teaser"></video><p class="film-caption"><span class="film-eyebrow">The Wedding Film</span><span class="film-line">Every love story deserves cinema</span></p></div></div>
 
-<!-- ═══════════════ BLESSINGS · SCRATCH & MAGIC ═══════════════ -->
+<!-- ═══════════════ BLESSINGS · SCRATCH ═══════════════ -->
 <section id="blessings">
   <header class="sec-head">
     <p class="eyebrow">For our dearest guests</p>
@@ -148,14 +148,14 @@
     <canvas id="scratch-foil"></canvas>
   </div>
 
-  <img loading="lazy" class="decor decor-lotus" data-depth="0.3" src="assets/decor/lotus.webp" alt="" aria-hidden="true">
+  <img loading="lazy" class="decor decor-lotus" src="assets/decor/lotus.webp" alt="" aria-hidden="true">
 </section>
 
-<!-- ═══════════════ THE HIDDEN MOMENT (scroll-driven · hand-conducted) ═══════════════ -->
+<!-- ═══════════════ THE HIDDEN MOMENT (scroll-driven) ═══════════════ -->
 <section id="sanctum">
   <div id="sanctum-stage">
     <header class="sec-head">
-      <p class="eyebrow" id="sanctum-eyebrow">For those who believe in magic</p>
+      <p class="eyebrow" id="sanctum-eyebrow">A sacred moment awaits</p>
       <h2 class="sec-title gold-foil" id="sanctum-heading">The Hidden Moment</h2>
       <p class="sec-sub" id="sanctum-hint"></p>
     </header>
@@ -171,23 +171,9 @@
       </div>
       <img loading="lazy" class="sanctum-arch" src="assets/decor/arch.webp" alt="" aria-hidden="true">
     </div>
-    <div id="magic-block">
-      <button id="magic-toggle" type="button">
-        <span class="magic-ico">✨</span>
-        <span class="magic-label">Enable Magic Mode</span>
-        <span class="magic-sub">Let your hand conduct this moment</span>
-      </button>
-      <p id="magic-status" class="hidden" role="status"></p>
-      <div id="sanctum-filmbar" aria-hidden="true">
-        <span class="bar"><span class="fill" id="sanctum-fill"></span></span>
-        <span class="cap">The moment · unfolding</span>
-      </div>
-      <div id="magic-hud" aria-hidden="true">
-        <video id="magic-cam" playsinline muted></video>
-        <canvas id="hud-canvas"></canvas>
-        <span class="hud-ring"></span>
-        <span class="hud-scan"></span>
-      </div>
+    <div id="sanctum-filmbar" aria-hidden="true">
+      <span class="bar"><span class="fill" id="sanctum-fill"></span></span>
+      <span class="cap">The moment · unfolding</span>
     </div>
   </div>
 </section>
@@ -283,7 +269,7 @@
   </p>
 </div>
 
-<script src="config.js?v=20260719-herofix"></script>
-<script src="app.js?v=20260719-herofix"></script>
+<script src="config.js?v=20260719-lean"></script>
+<script src="app.js?v=20260719-lean"></script>
 </body>
 </html>

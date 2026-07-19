@@ -22,7 +22,7 @@ Open `http://127.0.0.1:4173/`. The portal route is
   gold transition for standard-motion visitors.
 - The 3D engine, scene bundle and world soundtrack are not requested until the
   visitor activates the portal. Same-tab navigation also lets the browser release
-  the invitation's canvases, video decoders and camera resources before WebGL starts.
+  the invitation's canvases and video decoders before WebGL starts.
 - The gateway is a bright CSS-only Rajputana torana, so it adds no image,
   video, canvas or library payload.
 - Reduced-motion visitors get immediate native navigation. Back navigation safely
@@ -43,8 +43,8 @@ Open `http://127.0.0.1:4173/`. The portal route is
 - Sanctum unlocks after a shorter adaptive runway, then streams through a bounded,
   evicting playhead window instead of retaining all 121 frames. Both scroll films
   use stable cached geometry so mobile browser chrome cannot jump their playheads.
-- Film clips remain lazy and play only near the viewport. Magic Mode and MediaPipe
-  remain opt-in and load only when requested.
+- Film clips remain lazy and play only near the viewport. No camera, hand-tracking
+  library or parallax listener is included in the invitation.
 
 ## Customize for another client
 
@@ -66,9 +66,8 @@ folder while keeping relative asset paths.
 ## Main features
 
 - Scroll-scrubbed origami cinema with adaptive image quality.
-- Gyroscope/mouse parallax, ambient petals and depth-layered wedding artwork.
+- Ambient petals and lightweight wedding artwork reveals.
 - Scratch-to-reveal blessing with haptics, temple bells and a petal ceremony.
-- Optional camera hand tracking for Magic Mode.
 - Hidden-moment film, event cards, films, venue, live countdown and RSVP.
 - Licensed background score blended with synthesized bells and transition sounds.
 - Accessible, keyboard-operable portal with mobile-safe full-page handoff to WebGL.

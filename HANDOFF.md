@@ -9,7 +9,7 @@ the WebGL bundle and its soundtrack download only after a guest chooses to enter
 1. **The Seal** — opening loader and the required user gesture that unlocks audio.
 2. **Hero film** — 181 origami WebP frames scrubbed by scroll with story beats.
 3. **Celebrations and films** — event cards and lazy cinematic clips.
-4. **Blessing and Hidden Moment** — scratch reveal plus a scroll/palm-driven film.
+4. **Blessing and Hidden Moment** — scratch reveal plus a scroll-driven film.
 5. **Venue and RSVP** — maps, live countdown and responsive RSVP sheet.
 6. **Finale** — names, wedding date and a Rajputana gateway into the celebration.
 7. **Portal handoff** — a short gold bloom, audio cross-fade and same-tab navigation.
@@ -63,7 +63,7 @@ merged and deployed.
 - High hero frames are desktop-only under suitable network/memory conditions and use
   a small evicting playhead window; never restore the old all-181 high-frame sweep.
 - Sanctum unlocks after an adaptive 6–16-frame runway, then streams and evicts around
-  its playhead. Both scroll films cache stable geometry; videos and MediaPipe remain lazy.
+  its playhead. Both scroll films cache stable geometry, and videos remain lazy.
 - Audio permission does not reliably cross a document navigation. The portal keeps the
   invitation score playing until navigation and passes its play state and timeline. The
   world opens directly, attempts the same shared score at that position, and silently

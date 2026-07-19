@@ -102,15 +102,15 @@ window.WEDDING_CONFIG = {
     ext: ".webp",
   },
 
-  // The Hidden Moment — hand-tracking exclusive film (video 2)
+  // The Hidden Moment — scroll-driven film
   sanctum: {
     count: 121,
     path: "assets/frames2/",
     prefix: "s_",               // s_001.webp … s_121.webp
     ext: ".webp",
     heading: "The Hidden Moment",
-    eyebrow: "For those who believe in magic",
-    hint: "Scroll to unfold it — or enable Magic Mode and let your palm conduct it",
+    eyebrow: "A sacred moment awaits",
+    hint: "Scroll gently to unfold this hidden moment",
     veilText: "A sacred moment awaits",
   },
 };
