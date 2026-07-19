@@ -11,7 +11,7 @@ the WebGL bundle and its soundtrack download only after a guest chooses to enter
 3. **Celebrations and films** — event cards and lazy cinematic clips.
 4. **Blessing and Hidden Moment** — scratch reveal plus a scroll/palm-driven film.
 5. **Venue and RSVP** — maps, live countdown and responsive RSVP sheet.
-6. **Finale** — names, wedding date and a palace gateway labelled `Enter the Portal`.
+6. **Finale** — names, wedding date and a Rajputana gateway into the celebration.
 7. **Portal handoff** — a short gold bloom, audio cross-fade and same-tab navigation.
 8. **3D wedding world** — the existing baraat experience, loaded only at this point.
 
@@ -57,11 +57,12 @@ merged and deployed.
 - Do not preload, prefetch or iframe the 3D route from the invitation.
 - Keep portal navigation in the same tab so the invitation's media/GPU work can be
   released before WebGL initializes.
-- The seal gates only the first 70 low hero frames. Remaining low frames stream after
-  entry through a bounded queue.
+- The seal gates only an adaptive 8–22 low hero frames. Nearby low frames stream after
+  entry through a bounded queue and are evicted outside the playhead window.
 - High hero frames are desktop-only under suitable network/memory conditions and use
   a small evicting playhead window; never restore the old all-181 high-frame sweep.
-- Sanctum frames use bounded concurrency. Videos and MediaPipe remain lazy.
+- Sanctum unlocks after an adaptive 8–20-frame runway, then streams and evicts around
+  its playhead. Videos and MediaPipe remain lazy.
 - Audio permission does not reliably cross a document navigation. The portal stores
   only play/mute intent; the world attempts same-origin playback and, when a mobile
   browser blocks it, retains its loader as an `Enter with wedding music` sound gate.
@@ -76,8 +77,8 @@ merged and deployed.
 - The transition ends on the same dark-maroon radial gradient as the world loader,
   avoiding a white flash.
 - `pageshow` resets the overlay and restores invitation audio after browser Back/bfcache.
-- The gateway visual is CSS-only: one luminous core, mandala rays and an expanding
-  blessing ring. Keep it image-free and animate only opacity/transform.
+- The gateway visual is a CSS-only Rajputana torana with carved pillars, lattice doors
+  and a gold light path. Keep it image-free and animate only opacity/transform.
 
 ## Current couple values
 

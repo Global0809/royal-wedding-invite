@@ -18,12 +18,12 @@ Open `http://127.0.0.1:4173/`. The portal route is
 ## Portal architecture
 
 - The invitation remains lightweight HTML, CSS and JavaScript with no build step.
-- `Enter the Portal` is a normal link to `world/index.html`, enhanced with a short
+- `Enter the Wedding World` is a normal link to `world/index.html`, enhanced with a short
   gold transition for standard-motion visitors.
 - The 3D engine, scene bundle and world soundtrack are not requested until the
   visitor activates the portal. Same-tab navigation also lets the browser release
   the invitation's canvases, video decoders and camera resources before WebGL starts.
-- The gateway is a bright CSS-only golden-energy effect, so it adds no image,
+- The gateway is a bright CSS-only Rajputana torana, so it adds no image,
   video, canvas or library payload.
 - Reduced-motion visitors get immediate native navigation. Back navigation safely
   restores the invitation and its audio state.
@@ -33,13 +33,13 @@ Open `http://127.0.0.1:4173/`. The portal route is
 
 ## Performance behavior
 
-- Only the first 70 low-resolution hero frames gate the opening seal. Remaining low
-  frames stream with bounded concurrency after entry.
+- Only an adaptive 8–22 low-resolution hero frames gate the opening seal. Nearby low
+  frames stream with bounded concurrency after entry and old frames are evicted.
 - High-resolution hero frames use a small sliding window around the current playhead
   and are disabled on touch devices, Save-Data, slow connections and low-memory
   devices. Old high-resolution frames are evicted.
-- Sanctum frames also load through a bounded queue instead of opening 121 requests
-  simultaneously.
+- Sanctum unlocks after a short adaptive runway, then streams through a bounded,
+  evicting playhead window instead of retaining all 121 frames.
 - Film clips remain lazy and play only near the viewport. Magic Mode and MediaPipe
   remain opt-in and load only when requested.
 

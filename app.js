@@ -57,7 +57,8 @@ window.addEventListener("orientationchange", () => {
 /* ═══════════════ AUDIO — synthesized temple sounds ═══════ */
 const audio = (() => {
   let ctx = null, master = null, bgm = null, noiseBuf = null;
-  let muted = localStorage.getItem("wed-muted") === "1";
+  let muted = false;
+  try { muted = localStorage.getItem("wed-muted") === "1"; } catch {}
   let bgmFadeToken = 0;
 
   const init = () => {
@@ -167,7 +168,7 @@ const audio = (() => {
 
   const toggleMute = () => {
     muted = !muted;
-    localStorage.setItem("wed-muted", muted ? "1" : "0");
+    try { localStorage.setItem("wed-muted", muted ? "1" : "0"); } catch {}
     if (master) master.gain.linearRampToValueAtTime(muted ? 0 : 1, ctx.currentTime + 0.3);
     if (bgm) bgm.muted = muted;
     return muted;
@@ -205,6 +206,7 @@ const audio = (() => {
   return {
     init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute,
     fadeForWorld, restoreAfterWorld, isMuted: () => muted,
+    hasBgm: () => !!bgm,
   };
 })();
 
@@ -219,11 +221,28 @@ const frames = (() => {
   const connection = navigator.connection || {};
   const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
   const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
-  const GATE = Math.min(70, N);
+  const GATE = Math.min(SAVE_DATA ? 8 : IS_TOUCH ? 14 : 22, N);
   const LO_LIMIT = SAVE_DATA ? 2 : IS_TOUCH ? 4 : 6;
+  const LO_AHEAD = SAVE_DATA ? 12 : IS_TOUCH ? 22 : 30;
+  const LO_BEHIND = IS_TOUCH ? 10 : 14;
+  const LO_KEEP = LO_AHEAD + LO_BEHIND + 8;
   const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
-  let loActive = 0, loPtr = GATE, loStreaming = false;
-  let hiActive = 0, current = 0;
+  let loActive = 0, loStreaming = false;
+  let hiActive = 0, current = 0, hiStarted = false;
+
+  const evictLo = () => {
+    if (!loStreaming) return;
+    for (let i = 0; i < N; i++) {
+      if (loState[i] === 2 && Math.abs(i - current) > LO_KEEP) {
+        if (lo[i]) {
+          lo[i].onload = lo[i].onerror = null;
+          lo[i].src = "";
+        }
+        lo[i] = null;
+        loState[i] = 0;
+      }
+    }
+  };
 
   const loadLo = (i, done) => {
     if (i < 0 || i >= N || loState[i] !== 0) return false;
@@ -232,11 +251,18 @@ const frames = (() => {
     const img = new Image();
     img.decoding = "async";
     lo[i] = img;
-    img.onload = img.onerror = () => {
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
       loState[i] = img.naturalWidth ? 2 : 3;
       loActive--;
+      evictLo();
       if (done) done();
     };
+    const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
+    img.onload = img.onerror = settle;
     img.src = CFG.frames.loPath + name(i);
     return true;
   };
@@ -245,13 +271,20 @@ const frames = (() => {
      the opened doors. No request for the remaining frames is made up front. */
   const preloadLo = (onProgress) => new Promise((resolve) => {
     if (!GATE) { resolve(); return; }
-    let next = 0, done = 0;
+    let next = 0, done = 0, finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      resolve();
+    };
+    const timeout = setTimeout(finish, 10000);
     const pumpGate = () => {
-      while (loActive < 8 && next < GATE) {
+      while (loActive < LO_LIMIT && next < GATE) {
         loadLo(next++, () => {
           done++;
           onProgress(done / GATE);
-          if (done === GATE) resolve();
+          if (done === GATE) finish();
           else pumpGate();
         });
       }
@@ -263,14 +296,15 @@ const frames = (() => {
     if (!loStreaming) return;
     while (loActive < LO_LIMIT) {
       let idx = -1;
-      for (let d = 0; d <= 18; d++) {
-        const a = current + d, b = current - d;
+      for (let d = 0; d <= LO_AHEAD; d++) {
+        const a = current + d;
         if (a < N && loState[a] === 0) { idx = a; break; }
-        if (b >= 0 && loState[b] === 0) { idx = b; break; }
       }
       if (idx < 0) {
-        while (loPtr < N && loState[loPtr] !== 0) loPtr++;
-        idx = loPtr < N ? loPtr++ : -1;
+        for (let d = 1; d <= LO_BEHIND; d++) {
+          const b = current - d;
+          if (b >= 0 && loState[b] === 0) { idx = b; break; }
+        }
       }
       if (idx < 0 || !loadLo(idx, pumpLo)) return;
     }
@@ -290,7 +324,7 @@ const frames = (() => {
   };
 
   const pumpHi = () => {
-    if (!hiEnabled) return;
+    if (!hiEnabled || !hiStarted) return;
     while (hiActive < HI_LIMIT) {
       let idx = -1;
       for (let d = 0; d <= HI_RADIUS; d++) {
@@ -303,13 +337,19 @@ const frames = (() => {
       const img = new Image();
       img.decoding = "async";
       hi[idx] = img;
-      img.onload = () => {
-        hiState[idx] = 2;
+      let settled = false;
+      const finish = (ready) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        hiState[idx] = ready ? 2 : 3;
         hiActive--;
-        evictHi();
+        if (ready) evictHi();
         pumpHi();
       };
-      img.onerror = () => { hiState[idx] = 3; hiActive--; pumpHi(); };
+      const timeout = setTimeout(() => { img.src = ""; finish(false); }, 9000);
+      img.onload = () => finish(true);
+      img.onerror = () => finish(false);
       img.src = CFG.frames.hiPath + name(idx);
     }
   };
@@ -317,10 +357,17 @@ const frames = (() => {
   return {
     N,
     preloadLo,
-    startHi: () => { loStreaming = true; pumpLo(); pumpHi(); },
-    setPlayhead: (i) => {
-      current = clamp(Math.round(i), 0, N - 1);
+    startHi: () => {
+      loStreaming = true;
       pumpLo();
+      if (hiEnabled) setTimeout(() => { hiStarted = true; pumpHi(); }, 1550);
+    },
+    setPlayhead: (i) => {
+      const next = clamp(Math.round(i), 0, N - 1);
+      if (next === current) return;
+      current = next;
+      pumpLo();
+      evictLo();
       evictHi();
       pumpHi();
     },
@@ -335,6 +382,11 @@ const frames = (() => {
       }
       return null;
     },
+    prime: (i, img) => {
+      if (i < 0 || i >= N || !img || !img.naturalWidth) return;
+      lo[i] = img;
+      loState[i] = 2;
+    },
   };
 })();
 
@@ -346,7 +398,12 @@ const scrub = (() => {
   const chapterEl = $("#crown-chapter");
   let chapterIdx = -1;
   const SCRUB_VH = 200;                        // scroll distance of the film (40% shorter = faster journey)
-  let cur = 0, target = 0, drawn = -1, tiltX = 0, settledFrames = 0;
+  let cur = 0, target = 0, drawn = -1, tiltX = 0, settledFrames = 0, active = true;
+
+  new IntersectionObserver(([entry]) => {
+    active = entry.isIntersecting;
+    if (active) drawn = -1;
+  }, { rootMargin: "160px 0px" }).observe(hero);
 
   /* beat windows in progress space: [in-start, in-end, out-start, out-end] */
   const WINDOWS = [
@@ -367,43 +424,19 @@ const scrub = (() => {
 
   const IVORY = () => getComputedStyle(document.documentElement).getPropertyValue("--ivory").trim() || "#F4EBDB";
   let ivory = "#F4EBDB";
-  /* Offscreen feather: the frame's own edges melt to transparent before compositing,
-     so no hard rectangle can ever show, whatever the film contains. */
-  let off = null, offCtx = null;
-  const featherFrame = (img, w, h) => {
-    if (!off || off.width !== w || off.height !== h) {
-      off = document.createElement("canvas");
-      off.width = w; off.height = h;
-      offCtx = off.getContext("2d");
-    }
-    offCtx.globalCompositeOperation = "source-over";
-    offCtx.clearRect(0, 0, w, h);
-    offCtx.drawImage(img, 0, 0, w, h);
-    offCtx.globalCompositeOperation = "destination-in";
-    const mx = Math.round(w * 0.10), my = Math.round(h * 0.10);
-    const gv = offCtx.createLinearGradient(0, 0, 0, h);
-    gv.addColorStop(0, "rgba(0,0,0,0)"); gv.addColorStop(my / h, "rgba(0,0,0,1)");
-    gv.addColorStop(1 - my / h, "rgba(0,0,0,1)"); gv.addColorStop(1, "rgba(0,0,0,0)");
-    offCtx.fillStyle = gv; offCtx.fillRect(0, 0, w, h);
-    const gh = offCtx.createLinearGradient(0, 0, w, 0);
-    gh.addColorStop(0, "rgba(0,0,0,0)"); gh.addColorStop(mx / w, "rgba(0,0,0,1)");
-    gh.addColorStop(1 - mx / w, "rgba(0,0,0,1)"); gh.addColorStop(1, "rgba(0,0,0,0)");
-    offCtx.fillStyle = gh; offCtx.fillRect(0, 0, w, h);
-    return off;
-  };
   const draw = (i, settled) => {
     const img = frames.get(i, settled);
     if (!img || !img.naturalWidth) return;
     if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return; }
     const cw = canvas.width, ch = canvas.height;
-    // The world FLOATS: contain-fit, edges feathered into the page ivory
+    // The world floats above the page; the CSS vignette feathers its edges.
     const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
     const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
     ctx2d.fillStyle = ivory;
     ctx2d.fillRect(0, 0, cw, ch);
     const px = tiltX * 9 * DPR;
     const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
-    ctx2d.drawImage(featherFrame(img, w, h), (cw - w) / 2 + px, py);
+    ctx2d.drawImage(img, (cw - w) / 2 + px, py, w, h);
   };
 
   const beatOpacity = (p, [a, b, c, d]) => {
@@ -413,8 +446,9 @@ const scrub = (() => {
     return 1 - (p - c) / Math.max(d - c, 1e-4);
   };
 
-  let progress = 0;
+  let progress = 0, lastBeatProgress = -1;
   const tick = (dt) => {
+    if (!active) return 0;
     const rect = hero.getBoundingClientRect();
     const dist = rect.height - window.innerHeight;
     progress = clamp(-rect.top / Math.max(dist, 1), 0, 1);
@@ -428,22 +462,25 @@ const scrub = (() => {
     const key = i * 2 + (settled ? 1 : 0);
     if (key !== drawn) { draw(i, settled); drawn = key; }
 
-    let domBeat = 0, domO = -1;
-    beats.forEach((el, k) => {
-      const o = beatOpacity(progress, WINDOWS[k]);
-      if (o > domO) { domO = o; domBeat = k; }
-      if (o <= 0) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
-      el.style.visibility = "visible";
-      el.style.opacity = o.toFixed(3);
-      el.style.transform = `translateY(${(1 - o) * 18}px)`;
-    });
-    // the crown chapter follows the story
-    if (domBeat !== chapterIdx) {
-      chapterIdx = domBeat;
-      chapterEl.textContent = beats[domBeat].dataset.chapter || "";
-      chapterEl.classList.remove("swap");
-      void chapterEl.offsetWidth;
-      chapterEl.classList.add("swap");
+    if (Math.abs(progress - lastBeatProgress) > .0001) {
+      let domBeat = 0, domO = -1;
+      beats.forEach((el, k) => {
+        const o = beatOpacity(progress, WINDOWS[k]);
+        if (o > domO) { domO = o; domBeat = k; }
+        if (o <= 0) { el.style.opacity = "0"; el.style.visibility = "hidden"; return; }
+        el.style.visibility = "visible";
+        el.style.opacity = o.toFixed(3);
+        el.style.transform = `translateY(${(1 - o) * 18}px)`;
+      });
+      // the crown chapter follows the story
+      if (domBeat !== chapterIdx) {
+        chapterIdx = domBeat;
+        chapterEl.textContent = beats[domBeat].dataset.chapter || "";
+        chapterEl.classList.remove("swap");
+        void chapterEl.offsetWidth;
+        chapterEl.classList.add("swap");
+      }
+      lastBeatProgress = progress;
     }
     return vel;
   };
@@ -459,21 +496,38 @@ const scrub = (() => {
 /* ═══════════════ PETALS — ambient particle system ════════ */
 const petals = (() => {
   const canvas = $("#petals"), c = canvas.getContext("2d");
+  const petalDpr = IS_TOUCH ? Math.min(DPR, 1.25) : DPR;
   const COLORS = [
     ["#8C2B47", "#5C1428"],   // rose maroon
     ["#E5B54B", "#C9922B"],   // marigold
     ["#F4EBDB", "#E0CDA8"],   // ivory
   ];
+  /* Pre-render each petal once. Drawing sprites is considerably cheaper than
+     rebuilding a gradient and Bezier path for every particle on every frame. */
+  const SPRITES = COLORS.map(([c1, c2]) => {
+    const sprite = document.createElement("canvas");
+    sprite.width = 48; sprite.height = 64;
+    const sc = sprite.getContext("2d");
+    const gradient = sc.createLinearGradient(24, 2, 24, 62);
+    gradient.addColorStop(0, c1); gradient.addColorStop(1, c2);
+    sc.fillStyle = gradient;
+    sc.beginPath();
+    sc.moveTo(24, 2);
+    sc.quadraticCurveTo(46, 21, 24, 62);
+    sc.quadraticCurveTo(2, 21, 24, 2);
+    sc.fill();
+    return sprite;
+  });
   let list = [], wind = 0, gust = 0, running = false, lowPerf = false;
   let attractor = null;       // {x,y} from hand tracking
 
   const resize = () => {
-    canvas.width = Math.round(innerWidth * DPR);
-    canvas.height = Math.round(innerHeight * DPR);
+    canvas.width = Math.round(innerWidth * petalDpr);
+    canvas.height = Math.round(innerHeight * petalDpr);
   };
 
   const spawn = (x, y, burst = false) => {
-    const [c1, c2] = COLORS[(Math.random() * COLORS.length) | 0];
+    const sprite = (Math.random() * SPRITES.length) | 0;
     list.push({
       x: x ?? Math.random() * innerWidth,
       y: y ?? -30,
@@ -483,7 +537,7 @@ const petals = (() => {
       ph: Math.random() * Math.PI * 2,
       rot: Math.random() * Math.PI * 2,
       vr: (Math.random() - 0.5) * 0.04,
-      c1, c2,
+      sprite,
       life: 1,
       fade: burst ? 0.004 : 0,
     });
@@ -513,18 +567,11 @@ const petals = (() => {
       if (p.y > innerHeight + 40 || p.life <= 0) { list.splice(i, 1); continue; }
       // draw petal
       c.save();
-      c.translate(p.x * DPR, p.y * DPR);
+      c.translate(p.x * petalDpr, p.y * petalDpr);
       c.rotate(p.rot);
-      c.scale(DPR, DPR);
+      c.scale(petalDpr, petalDpr);
       c.globalAlpha = 0.78 * Math.max(p.life, 0);
-      const g = c.createLinearGradient(0, -p.s, 0, p.s);
-      g.addColorStop(0, p.c1); g.addColorStop(1, p.c2);
-      c.fillStyle = g;
-      c.beginPath();
-      c.moveTo(0, -p.s);
-      c.quadraticCurveTo(p.s * 0.8, -p.s * 0.25, 0, p.s);
-      c.quadraticCurveTo(-p.s * 0.8, -p.s * 0.25, 0, -p.s);
-      c.fill();
+      c.drawImage(SPRITES[p.sprite], -p.s * 0.78, -p.s, p.s * 1.56, p.s * 2);
       c.restore();
     }
   };
@@ -677,24 +724,45 @@ const parallax = (() => {
     paintFoil();
   }).observe(wrap);
 
-  const checkCleared = () => {
-    const sw = 36, sh = 48;
-    const img = c.getImageData(0, 0, canvas.width, canvas.height);
-    let empty = 0, step = Math.max(1, Math.floor(canvas.width / sw)) * 4;
-    const rowStep = Math.max(1, Math.floor(canvas.height / sh));
-    for (let y = 0; y < canvas.height; y += rowStep)
-      for (let x = 3; x < canvas.width * 4; x += step)
-        if (img.data[y * canvas.width * 4 + x] < 128) empty++;   // <128: GPU/hibernation alpha residue
-    return empty / (sw * sh) > 0.55;
+  /* Track the scratched area on a tiny logical grid. This avoids expensive
+     full-canvas pixel readbacks while a finger is moving. */
+  const GRID_W = 36, GRID_H = 48;
+  const scratched = new Uint8Array(GRID_W * GRID_H);
+  let scratchedCells = 0;
+  const markScratched = (from, to) => {
+    const ax = from ? from.x / canvas.width * GRID_W : to.x / canvas.width * GRID_W;
+    const ay = from ? from.y / canvas.height * GRID_H : to.y / canvas.height * GRID_H;
+    const bx = to.x / canvas.width * GRID_W;
+    const by = to.y / canvas.height * GRID_H;
+    const rx = Math.max(1, c.lineWidth * 0.5 / canvas.width * GRID_W);
+    const ry = Math.max(1, c.lineWidth * 0.5 / canvas.height * GRID_H);
+    const steps = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / Math.max(1, Math.min(rx, ry) * .55)));
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps;
+      const gx = lerp(ax, bx, t), gy = lerp(ay, by, t);
+      const x0 = Math.max(0, Math.floor(gx - rx)), x1 = Math.min(GRID_W - 1, Math.ceil(gx + rx));
+      const y0 = Math.max(0, Math.floor(gy - ry)), y1 = Math.min(GRID_H - 1, Math.ceil(gy + ry));
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const dx = (x + .5 - gx) / rx, dy = (y + .5 - gy) / ry;
+          const cell = y * GRID_W + x;
+          if (dx * dx + dy * dy <= 1 && !scratched[cell]) {
+            scratched[cell] = 1;
+            scratchedCells++;
+          }
+        }
+      }
+    }
+    return scratchedCells / scratched.length > .55;
   };
 
-  let last = null;
+  let last = null, scratchRect = null;
   const DBG = /[?&]tick/.test(location.search) ? (window.__scratchDbg = { calls: 0, drawn: 0, blocked: "" }) : null;
   const scratch = (e) => {
     if (DBG) DBG.calls++;
     if (cleared || !painted) { if (DBG) DBG.blocked = `cleared=${cleared} painted=${painted}`; return; }
     if (DBG) DBG.drawn++;
-    const r = canvas.getBoundingClientRect();
+    const r = scratchRect || canvas.getBoundingClientRect();
     const x = (e.clientX - r.left) * (canvas.width / r.width);
     const y = (e.clientY - r.top) * (canvas.height / r.height);
     c.globalCompositeOperation = "destination-out";
@@ -705,9 +773,10 @@ const parallax = (() => {
     c.lineTo(x, y);
     c.stroke();
     c.globalCompositeOperation = "source-over";
+    const enough = markScratched(last, { x, y });
     last = { x, y };
     audio.scratchNoise();
-    if (++strokes % 14 === 0 && checkCleared()) reveal();
+    if (++strokes % 4 === 0 && enough) reveal();
   };
 
   const reveal = () => {
@@ -725,9 +794,17 @@ const parallax = (() => {
     setTimeout(() => petals.burst(r.left + r.width / 2, r.top + r.height / 4, 16), 900);
   };
 
-  canvas.addEventListener("pointerdown", (e) => { try { canvas.setPointerCapture(e.pointerId); } catch {} last = null; scratch(e); });
+  canvas.addEventListener("pointerdown", (e) => {
+    try { canvas.setPointerCapture(e.pointerId); } catch {}
+    scratchRect = canvas.getBoundingClientRect();
+    last = null;
+    scratch(e);
+  });
   canvas.addEventListener("pointermove", (e) => { if (e.buttons) scratch(e); });
-  canvas.addEventListener("pointerup", () => { last = null; });
+  ["pointerup", "pointercancel"].forEach((eventName) => canvas.addEventListener(eventName, () => {
+    last = null;
+    scratchRect = null;
+  }));
 })();
 
 /* ═══════════════ MAGIC BUS — hand state shared between
@@ -747,38 +824,92 @@ const sanctum = (() => {
   const canvas = $("#sanctum-canvas"), c = canvas.getContext("2d");
   const progressEl = $("#sanctum-progress"), veilText = $("#sanctum-veil-text");
   const imgs = new Array(S.count);
+  const imgState = new Uint8Array(S.count);
+  const gateCount = Math.min(SAVE_DATA ? 8 : IS_TOUCH ? 14 : 20, S.count);
+  const loadLimit = SAVE_DATA ? 2 : IS_TOUCH ? 4 : 6;
+  const ahead = SAVE_DATA ? 10 : IS_TOUCH ? 18 : 24;
+  const behind = IS_TOUCH ? 8 : 12;
+  const keep = ahead + behind + 6;
+  const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
   let state = "locked";            // locked → loading → unlocked
-  let inView = false, cur = 0, target = 0, drawn = -1;
+  let inView = false, cur = 0, target = 0, drawn = -1, activeLoads = 0;
+
+  const evict = () => {
+    if (state !== "unlocked") return;
+    const center = Math.round(target);
+    for (let i = 0; i < S.count; i++) {
+      if (imgState[i] === 2 && Math.abs(i - center) > keep) {
+        imgs[i].onload = imgs[i].onerror = null;
+        imgs[i].src = "";
+        imgs[i] = null;
+        imgState[i] = 0;
+      }
+    }
+  };
+
+  const loadFrame = (i, done) => {
+    if (i < 0 || i >= S.count || imgState[i] !== 0) return false;
+    imgState[i] = 1;
+    activeLoads++;
+    const img = new Image();
+    img.decoding = "async";
+    imgs[i] = img;
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      imgState[i] = img.naturalWidth ? 2 : 3;
+      activeLoads--;
+      evict();
+      if (done) done();
+    };
+    const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
+    img.onload = img.onerror = settle;
+    img.src = name(i);
+    return true;
+  };
+
+  const pumpWindow = () => {
+    if (state !== "unlocked") return;
+    const center = clamp(Math.round(target), 0, S.count - 1);
+    while (activeLoads < loadLimit) {
+      let idx = -1;
+      for (let d = 0; d <= ahead; d++) {
+        const i = center + d;
+        if (i < S.count && imgState[i] === 0) { idx = i; break; }
+      }
+      if (idx < 0) {
+        for (let d = 1; d <= behind; d++) {
+          const i = center - d;
+          if (i >= 0 && imgState[i] === 0) { idx = i; break; }
+        }
+      }
+      if (idx < 0 || !loadFrame(idx, () => { drawn = -1; pumpWindow(); })) return;
+    }
+  };
 
   new IntersectionObserver((es) => {
     es.forEach((e) => {
       inView = e.isIntersecting;
       if (e.isIntersecting && state === "locked") load();   // everyone gets the moment
     });
-  }, { rootMargin: "900px 0px" }).observe(sec);
+  }, { rootMargin: SAVE_DATA ? "240px 0px" : IS_TOUCH ? "520px 0px" : "700px 0px" }).observe(sec);
 
   const load = () => {
     state = "loading";
     veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
-    let done = 0, next = 0, active = 0;
-    const limit = IS_TOUCH ? 4 : 6;
-    const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
+    let done = 0, next = 0;
     const pump = () => {
-      while (active < limit && next < S.count) {
+      while (activeLoads < loadLimit && next < gateCount) {
         const i = next++;
-        const img = new Image();
-        img.decoding = "async";
-        imgs[i] = img;
-        active++;
-        img.onload = img.onerror = () => {
-          active--;
+        loadFrame(i, () => {
           done++;
-          progressEl.textContent = Math.round(done / S.count * 100) + "%";
-          if (done === S.count) unlock();
+          progressEl.textContent = Math.round(done / gateCount * 100) + "%";
+          if (done === gateCount) unlock();
           else pump();
-        };
-        img.src = name(i);
+        });
       }
     };
     pump();
@@ -793,19 +924,28 @@ const sanctum = (() => {
   };
 
   const draw = (i) => {
-    const img = imgs[i];
-    if (!img || !img.naturalWidth) return;
+    let img = imgState[i] === 2 ? imgs[i] : null;
+    if (!img) {
+      for (let d = 1; d < S.count; d++) {
+        const a = i + d, b = i - d;
+        if (a < S.count && imgState[a] === 2) { img = imgs[a]; break; }
+        if (b >= 0 && imgState[b] === 2) { img = imgs[b]; break; }
+      }
+    }
+    if (!img || !img.naturalWidth) return false;
     if (canvas.width < 2) resize();
     const cw = canvas.width, ch = canvas.height;
     const s = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
     const w = img.naturalWidth * s, h = img.naturalHeight * s;
     c.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
+    return true;
   };
 
   const unlock = () => {
     state = "unlocked";
     resize();
     draw(0);
+    pumpWindow();
     sec.classList.add("unlocked");
     audio.bell(560, 0.5, 3.4);
     if (navigator.vibrate) navigator.vibrate([20, 60, 30]);
@@ -815,13 +955,7 @@ const sanctum = (() => {
 
   const tick = (dt) => {
     magicBus.captured = state === "unlocked" && inView && magicBus.active && magicBus.handY != null;
-    if (state === "locked") {
-      // proximity fallback in case the observer is late (throttled tabs, odd browsers)
-      const r = sec.getBoundingClientRect();
-      if (r.top < window.innerHeight * 2) load();
-      return;
-    }
-    if (state !== "unlocked") return;
+    if (state !== "unlocked" || !inView) return;
     if (magicBus.captured) {
       // palm height conducts the film: lower the palm = fold back, raise = unfold
       const y = clamp((0.82 - magicBus.handY) / 0.64, 0, 1);
@@ -835,8 +969,10 @@ const sanctum = (() => {
     }
     cur = lerp(cur, target, 1 - Math.exp(-dt * 6));
     const i = Math.round(cur);
-    if (i !== drawn) {
-      draw(i); drawn = i;
+    pumpWindow();
+    evict();
+    if (i !== drawn && draw(i)) {
+      drawn = i;
       fillEl.style.transform = `scaleX(${(i / (S.count - 1)).toFixed(3)})`;
     }
   };
@@ -849,20 +985,27 @@ const sanctum = (() => {
 /* ═══════════════ DECOR PARALLAX — floating cutouts ═══════ */
 const decor = (() => {
   const els = [...document.querySelectorAll(".decor[data-depth]")].map((el) => ({
-    el, depth: parseFloat(el.dataset.depth) || 0.2,
+    el, depth: parseFloat(el.dataset.depth) || 0.2, visible: false, lastY: 0,
   }));
+  const itemFor = new Map(els.map((item) => [item.el, item]));
   const io = new IntersectionObserver((es) => {
-    es.forEach((e) => e.target.classList.toggle("shown", e.isIntersecting));
+    es.forEach((e) => {
+      e.target.classList.toggle("shown", e.isIntersecting);
+      const item = itemFor.get(e.target);
+      if (item) item.visible = e.isIntersecting;
+    });
   }, { threshold: 0.04 });
   document.querySelectorAll(".decor, .foot-diya").forEach((el) => io.observe(el));
 
   const tick = (tiltX) => {
     const mid = window.innerHeight / 2;
-    els.forEach(({ el, depth }) => {
-      const r = el.getBoundingClientRect();
-      if (r.bottom < -80 || r.top > window.innerHeight + 80) return;
-      const delta = (r.top + r.height / 2 - mid) * -depth;
-      el.style.transform = `translate3d(${(tiltX * depth * 46).toFixed(1)}px, ${delta.toFixed(1)}px, 0)`;
+    els.forEach((item) => {
+      if (!item.visible) return;
+      const r = item.el.getBoundingClientRect();
+      const untransformedTop = r.top - item.lastY;
+      const delta = (untransformedTop + r.height / 2 - mid) * -item.depth;
+      item.lastY = delta;
+      item.el.style.transform = `translate3d(${(tiltX * item.depth * 46).toFixed(1)}px, ${delta.toFixed(1)}px, 0)`;
     });
   };
   return { tick };
@@ -893,8 +1036,9 @@ const decor = (() => {
       hudCtx.fill();
     });
   };
-  let on = false, stream = null, landmarker = null, rafId = 0, lastVideoTime = -1;
+  let on = false, loading = false, stream = null, landmarker = null, rafId = 0, lastVideoTime = -1;
   let scrollVel = 0;
+  btn.setAttribute("aria-pressed", "false");
 
   const say = (msg) => { status.textContent = msg; status.classList.remove("hidden"); };
 
@@ -903,6 +1047,7 @@ const decor = (() => {
     magicBus.active = false;
     magicBus.handY = null;
     btn.classList.remove("on");
+    btn.setAttribute("aria-pressed", "false");
     btn.querySelector(".magic-label").textContent = "Enable Magic Mode";
     btn.querySelector(".magic-sub").textContent = "Wave your hand — the page follows";
     cancelAnimationFrame(rafId);
@@ -952,6 +1097,10 @@ const decor = (() => {
 
   btn.addEventListener("click", async () => {
     if (on) { stop(); return; }
+    if (loading) return;
+    loading = true;
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
     try {
       say("Summoning the magic… ✨");
       btn.querySelector(".magic-label").textContent = "Loading…";
@@ -973,6 +1122,7 @@ const decor = (() => {
       await cam.play();
       on = true;
       btn.classList.add("on");
+      btn.setAttribute("aria-pressed", "true");
       btn.querySelector(".magic-label").textContent = "Magic Mode On";
       btn.querySelector(".magic-sub").textContent = "Tap again to turn off";
       hud.classList.add("live");
@@ -986,8 +1136,13 @@ const decor = (() => {
         ? "No camera, no problem — just scroll: the moment unfolds anyway. Tap to retry magic."
         : "Magic unavailable here — but scroll on: the moment unfolds with your scroll.");
       btn.querySelector(".magic-label").textContent = "Enable Magic Mode";
+    } finally {
+      loading = false;
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
     }
   });
+  addEventListener("pagehide", stop);
 })();
 
 /* ═══════════════ VENUE + RSVP ════════════════════════════ */
@@ -1003,7 +1158,7 @@ const decor = (() => {
 
   const modal = $("#rsvp-modal"), slot = $("#rsvp-frame-slot");
   const hasRealForm = CFG.rsvp.formUrl && !/PLACEHOLDER/i.test(CFG.rsvp.formUrl);
-  let built = false;
+  let built = false, returnFocus = null;
   const buildRsvp = () => {
     if (built) return;
     built = true;
@@ -1011,6 +1166,7 @@ const decor = (() => {
       const f = document.createElement("iframe");
       f.src = CFG.rsvp.formUrl;
       f.loading = "lazy";
+      f.title = "Wedding RSVP form";
       slot.appendChild(f);
       return;
     }
@@ -1056,26 +1212,54 @@ const decor = (() => {
     });
   };
   $("#rsvp-btn").addEventListener("click", () => {
+    returnFocus = document.activeElement;
     buildRsvp();
     modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     audio.chime();
+    requestAnimationFrame(() => (slot.querySelector("input, select, textarea, button") || $("#rsvp-close")).focus());
   });
-  const close = () => { modal.classList.add("hidden"); document.body.style.overflow = ""; };
+  const close = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+    if (returnFocus && returnFocus.focus) returnFocus.focus();
+  };
   $("#rsvp-close").addEventListener("click", close);
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
-  addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  addEventListener("keydown", (e) => {
+    if (modal.classList.contains("hidden")) return;
+    if (e.key === "Escape") { close(); return; }
+    if (e.key !== "Tab") return;
+    const focusable = [...modal.querySelectorAll('button, input, select, textarea, iframe, [href], [tabindex]:not([tabindex="-1"])')]
+      .filter((el) => !el.disabled && el.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 })();
 
 /* ═══════════════ FILM BANDS — lazy cinematic loops ═══════ */
 const finale = (() => {
   const el = document.getElementById("finale");
   let done = false;
-  const tick = () => {
+  const reveal = () => {
     if (done || !el) return;
-    const r = el.getBoundingClientRect();
-    if (r.top < innerHeight * 0.78) { done = true; el.classList.add("shown"); audio.chime(); }
+    done = true;
+    el.classList.add("shown");
+    audio.chime();
   };
+  let tick = () => {};
+  if (el && "IntersectionObserver" in window) {
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) { reveal(); io.disconnect(); }
+    }, { rootMargin: "0px 0px -22% 0px", threshold: 0.01 });
+    io.observe(el);
+  } else if (el) {
+    tick = () => { if (el.getBoundingClientRect().top < innerHeight * 0.78) reveal(); };
+  }
   return { tick };
 })();
 
@@ -1142,6 +1326,7 @@ const finale = (() => {
 
 const films = (() => {
   const vids = [...document.querySelectorAll(".film-band video")];
+  const pauseAll = () => vids.forEach((v) => { if (!v.paused) v.pause(); });
   const wake = (v) => {
     if (!v.src && v.dataset.src) v.src = v.dataset.src;
     if (v.paused) v.play().catch(() => {});
@@ -1159,6 +1344,8 @@ const films = (() => {
       else if (!v.paused) v.pause();
     });
   };
+  document.addEventListener("visibilitychange", () => { if (document.hidden) pauseAll(); });
+  addEventListener("pagehide", pauseAll);
   return { tick };
 })();
 
@@ -1167,6 +1354,14 @@ const films = (() => {
   const b = $("#sound-toggle");
   if (audio.isMuted()) b.classList.add("muted");
   b.addEventListener("click", () => {
+    if (!audio.hasBgm()) {
+      audio.init();
+      if (audio.isMuted()) b.classList.toggle("muted", audio.toggleMute());
+      audio.startBgm();
+      if (!audio.isMuted()) audio.chime();
+      return;
+    }
+    audio.init();
     b.classList.toggle("muted", audio.toggleMute());
     if (!audio.isMuted()) audio.chime();
   });
@@ -1216,7 +1411,7 @@ const films = (() => {
   /* Holographic tilt + sheen on event cards (touch/pointer driven) */
   document.getElementById("event-cards").addEventListener("pointermove", (e) => {
     const card = e.target.closest(".event-card");
-    if (!card || REDUCED) return;
+    if (!card || REDUCED || IS_TOUCH) return;
     const r = card.getBoundingClientRect();
     const fx = clamp((e.clientX - r.left) / r.width, 0, 1);
     const fy = clamp((e.clientY - r.top) / r.height, 0, 1);
@@ -1260,7 +1455,7 @@ const films = (() => {
 
 /* ═══════════════ MAIN LOOP + FPS GUARD ═══════════════════ */
 const threadEl = $("#thread");
-let lastT = performance.now(), fpsAcc = 0, fpsN = 0, degraded = false;
+let lastT = performance.now(), fpsAcc = 0, fpsN = 0, degraded = false, lastSp = -1;
 const mainLoop = (t) => {
   const dt = Math.min((t - lastT) / 1000, 0.05);
   lastT = t;
@@ -1275,7 +1470,10 @@ const mainLoop = (t) => {
   // golden scroll thread
   const doc = document.documentElement;
   const sp = clamp(scrollY / Math.max(doc.scrollHeight - innerHeight, 1), 0, 1);
-  threadEl.style.setProperty("--sp", sp.toFixed(4));
+  if (Math.abs(sp - lastSp) > 0.0004) {
+    threadEl.style.setProperty("--sp", sp.toFixed(4));
+    lastSp = sp;
+  }
   // fps monitor
   fpsAcc += dt; fpsN++;
   if (fpsAcc > 2 && !degraded) {
@@ -1298,9 +1496,10 @@ const mainLoop = (t) => {
   if (REDUCED) {
     // Reduced motion: static invitation, no film scrub, no petals
     loader.classList.add("gone");
+    $("#hero").style.height = "calc(var(--vh) * 100)";
     document.querySelectorAll(".beat").forEach((b, i) => { b.style.opacity = i === 0 ? 1 : 0; });
     const img = new Image();
-    img.onload = () => scrub.firstPaint();
+    img.onload = () => { frames.prime(0, img); scrub.firstPaint(); };
     img.src = CFG.frames.loPath + CFG.frames.prefix + "001" + CFG.frames.ext;
     $("#sound-toggle").classList.remove("hidden");
     return;
