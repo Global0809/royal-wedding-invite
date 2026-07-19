@@ -229,9 +229,10 @@ const frames = (() => {
   const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
   const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
   const GATE = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 8 : 18, N);
-  const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 5;
-  const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 18 : 26;
-  const LO_BEHIND = IS_TOUCH ? 8 : 12;
+  const GATE_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 2 : 4;
+  const LO_LIMIT = SAVE_DATA ? 1 : IS_TOUCH ? 3 : 5;
+  const LO_AHEAD = SAVE_DATA ? 10 : IS_TOUCH ? 32 : 30;
+  const LO_BEHIND = IS_TOUCH ? 10 : 12;
   const LO_KEEP_AHEAD = LO_AHEAD + 4;
   const LO_KEEP_BEHIND = LO_BEHIND + 4;
   const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
@@ -263,7 +264,7 @@ const frames = (() => {
     img._scrubKey = `lo-${i}`;
     if (loStreaming) {
       const distance = Math.abs(i - current);
-      img.fetchPriority = distance <= 2 ? "high" : distance <= LO_AHEAD ? "auto" : "low";
+      img.fetchPriority = SAVE_DATA ? "low" : distance <= 4 ? "high" : "auto";
     }
     lo[i] = img;
     let settled = false;
@@ -299,7 +300,7 @@ const frames = (() => {
     };
     const timeout = setTimeout(finish, 10000);
     const pumpGate = () => {
-      while (loActive < LO_LIMIT && next < GATE) {
+      while (loActive < GATE_LIMIT && next < GATE) {
         loadLo(next++, () => {
           done++;
           onProgress(done / GATE);
@@ -436,7 +437,9 @@ const scrub = (() => {
   const beats = [...document.querySelectorAll(".beat")];
   const chapterEl = $("#crown-chapter");
   let chapterIdx = -1, chapterSwapToken = 0;
-  const SCRUB_VH = 200;                        // scroll distance of the film (40% shorter = faster journey)
+  // Give each of the 181 frames enough physical scroll distance to advance
+  // one-or-two frames per touch sample instead of jumping several at once.
+  const SCRUB_VH = IS_TOUCH ? 450 : 340;
   let cur = 0, target = 0, drawn = "", tiltX = 0, settledFrames = 0, active = true;
   let scrollStart = 0, scrollDistance = 1, backdropKey = "";
 
@@ -516,7 +519,7 @@ const scrub = (() => {
     progress = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
     target = progress * (frames.N - 1);
     const gap = Math.abs(target - cur);
-    const response = IS_TOUCH ? (gap > 10 ? 24 : 18) : (gap > 10 ? 18 : 12);
+    const response = IS_TOUCH ? (gap > 8 ? 30 : 22) : (gap > 10 ? 20 : 14);
     cur = lerp(cur, target, 1 - Math.exp(-dt * response));
     const vel = Math.abs(target - cur);
     if (vel < 1.4) settledFrames++; else settledFrames = 0;
@@ -1730,6 +1733,9 @@ const mainLoop = (t) => {
     statusEl.classList.add("hidden");
     tapEl.classList.remove("hidden");
     sealBtn.disabled = false;
+    // Use the natural pause before the seal tap to decode the opening runway.
+    // The queue remains bounded, so this adds readiness rather than a bulk preload.
+    if (!SAVE_DATA) frames.startLo();
   });
 
   sealBtn.addEventListener("click", () => {
@@ -1741,12 +1747,7 @@ const mainLoop = (t) => {
     parallax.enable();
     loader.classList.add("open");
     $("#hero").classList.add("entered");     // names cascade in as the doors part
-    const warmLowFrames = () => frames.startLo();
-    if (!SAVE_DATA && "requestIdleCallback" in window) {
-      requestIdleCallback(warmLowFrames, { timeout: 520 });
-    } else {
-      setTimeout(warmLowFrames, SAVE_DATA ? 1050 : IS_TOUCH ? 260 : 0);
-    }
+    frames.startLo();
     setTimeout(() => {
       loader.classList.add("gone");
       $("#sound-toggle").classList.remove("hidden");
