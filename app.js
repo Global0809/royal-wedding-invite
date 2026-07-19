@@ -58,6 +58,7 @@ window.addEventListener("orientationchange", () => {
 const audio = (() => {
   let ctx = null, master = null, bgm = null, noiseBuf = null;
   let muted = localStorage.getItem("wed-muted") === "1";
+  let bgmFadeToken = 0;
 
   const init = () => {
     if (ctx) { ctx.resume(); return; }
@@ -75,16 +76,28 @@ const audio = (() => {
   const startBgm = () => {
     if (bgm) return;
     bgm = new Audio("assets/audio/bgm.m4a");
+    bgm.preload = "metadata";
     bgm.loop = true;
+    bgm.playsInline = true;
     bgm.volume = 0;
     bgm.muted = muted;
-    bgm.play().catch(() => {});
-    let v = 0;
-    const fade = setInterval(() => {
-      v = Math.min(v + 0.02, 0.32);
-      bgm.volume = v;
-      if (v >= 0.32) clearInterval(fade);
-    }, 120);
+    bgm.play().then(() => fadeBgmTo(0.32, 1900)).catch(() => {});
+  };
+
+  const fadeBgmTo = (target, duration = 600, pauseAtEnd = false) => {
+    if (!bgm) return;
+    const token = ++bgmFadeToken;
+    const from = bgm.volume;
+    const started = performance.now();
+    const step = (now) => {
+      if (token !== bgmFadeToken || !bgm) return;
+      const p = Math.min(1, (now - started) / Math.max(1, duration));
+      const eased = 1 - Math.pow(1 - p, 2);
+      bgm.volume = from + (target - from) * eased;
+      if (p < 1) requestAnimationFrame(step);
+      else if (pauseAtEnd) bgm.pause();
+    };
+    requestAnimationFrame(step);
   };
 
   /* Soft airy whoosh for scroll gusts */
@@ -160,60 +173,143 @@ const audio = (() => {
     return muted;
   };
 
+  const fadeForWorld = (duration = 720) => {
+    if (ctx && master) {
+      const now = ctx.currentTime;
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(master.gain.value, now);
+      master.gain.linearRampToValueAtTime(0.0001, now + duration / 1000);
+    }
+    fadeBgmTo(0, duration, true);
+  };
+
+  const restoreAfterWorld = () => {
+    ++bgmFadeToken;
+    if (ctx && master) {
+      const now = ctx.currentTime;
+      master.gain.cancelScheduledValues(now);
+      master.gain.setValueAtTime(master.gain.value, now);
+      master.gain.linearRampToValueAtTime(muted ? 0.0001 : 1, now + 0.45);
+    }
+    if (bgm && !muted) {
+      bgm.volume = 0;
+      bgm.play().then(() => fadeBgmTo(0.32, 650)).catch(() => {});
+    }
+  };
+
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) { ctx && ctx.suspend(); bgm && bgm.pause(); }
     else { ctx && ctx.resume(); bgm && !muted && bgm.play().catch(() => {}); }
   });
 
-  return { init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute, isMuted: () => muted };
+  return {
+    init, bell, chime, startBgm, whoosh, scratchNoise, toggleMute,
+    fadeForWorld, restoreAfterWorld, isMuted: () => muted,
+  };
 })();
 
 /* ═══════════════ FRAME STORE — two-tier loader ═══════════ */
 const frames = (() => {
   const N = CFG.frames.count;
   const lo = new Array(N), hi = new Array(N);
-  const hiState = new Uint8Array(N);          // 0 none · 1 loading · 2 ready
+  const loState = new Uint8Array(N);          // 0 none · 1 loading · 2 ready · 3 failed
+  const hiState = new Uint8Array(N);
   const name = (i) => CFG.frames.prefix + String(i + 1).padStart(3, "0") + CFG.frames.ext;
-  let loLoaded = 0, hiEnabled = !SAVE_DATA, hiPtr = 0, hiActive = 0, current = 0;
+  const memory = Number(navigator.deviceMemory || 8);
+  const connection = navigator.connection || {};
+  const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
+  const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
+  const GATE = Math.min(70, N);
+  const LO_LIMIT = SAVE_DATA ? 2 : IS_TOUCH ? 4 : 6;
+  const HI_LIMIT = 3, HI_RADIUS = 4, HI_KEEP = 8;
+  let loActive = 0, loPtr = GATE, loStreaming = false;
+  let hiActive = 0, current = 0;
+
+  const loadLo = (i, done) => {
+    if (i < 0 || i >= N || loState[i] !== 0) return false;
+    loState[i] = 1;
+    loActive++;
+    const img = new Image();
+    img.decoding = "async";
+    lo[i] = img;
+    img.onload = img.onerror = () => {
+      loState[i] = img.naturalWidth ? 2 : 3;
+      loActive--;
+      if (done) done();
+    };
+    img.src = CFG.frames.loPath + name(i);
+    return true;
+  };
 
   /* Entry is gated on the first GATE frames only; the rest stream behind
-     the opened doors. Cuts time-to-seal by ~60% on slow connections. */
-  const GATE = Math.min(70, N);
+     the opened doors. No request for the remaining frames is made up front. */
   const preloadLo = (onProgress) => new Promise((resolve) => {
-    let gateDone = 0, resolved = false;
-    for (let i = 0; i < N; i++) {
-      const img = new Image();
-      img.decoding = "async";
-      img.onload = img.onerror = () => {
-        loLoaded++;
-        if (i < GATE) {
-          gateDone++;
-          onProgress(gateDone / GATE);
-          if (gateDone >= GATE && !resolved) { resolved = true; resolve(); }
-        }
-      };
-      img.src = CFG.frames.loPath + name(i);
-      lo[i] = img;
-    }
+    if (!GATE) { resolve(); return; }
+    let next = 0, done = 0;
+    const pumpGate = () => {
+      while (loActive < 8 && next < GATE) {
+        loadLo(next++, () => {
+          done++;
+          onProgress(done / GATE);
+          if (done === GATE) resolve();
+          else pumpGate();
+        });
+      }
+    };
+    pumpGate();
   });
+
+  const pumpLo = () => {
+    if (!loStreaming) return;
+    while (loActive < LO_LIMIT) {
+      let idx = -1;
+      for (let d = 0; d <= 18; d++) {
+        const a = current + d, b = current - d;
+        if (a < N && loState[a] === 0) { idx = a; break; }
+        if (b >= 0 && loState[b] === 0) { idx = b; break; }
+      }
+      if (idx < 0) {
+        while (loPtr < N && loState[loPtr] !== 0) loPtr++;
+        idx = loPtr < N ? loPtr++ : -1;
+      }
+      if (idx < 0 || !loadLo(idx, pumpLo)) return;
+    }
+  };
+
+  const evictHi = () => {
+    for (let i = 0; i < N; i++) {
+      if (hiState[i] === 2 && Math.abs(i - current) > HI_KEEP) {
+        if (hi[i]) {
+          hi[i].onload = hi[i].onerror = null;
+          hi[i].src = "";
+        }
+        hi[i] = null;
+        hiState[i] = 0;
+      }
+    }
+  };
 
   const pumpHi = () => {
     if (!hiEnabled) return;
-    while (hiActive < 4) {
-      // prefer frames near the playhead, else sweep forward
+    while (hiActive < HI_LIMIT) {
       let idx = -1;
-      for (let d = 0; d < 26; d++) {
+      for (let d = 0; d <= HI_RADIUS; d++) {
         const a = current + d, b = current - d;
         if (a < N && hiState[a] === 0) { idx = a; break; }
         if (b >= 0 && hiState[b] === 0) { idx = b; break; }
       }
-      if (idx === -1) { while (hiPtr < N && hiState[hiPtr] !== 0) hiPtr++; idx = hiPtr < N ? hiPtr : -1; }
       if (idx === -1) return;
       hiState[idx] = 1; hiActive++;
       const img = new Image();
       img.decoding = "async";
-      img.onload = () => { hiState[idx] = 2; hi[idx] = img; hiActive--; pumpHi(); };
-      img.onerror = () => { hiState[idx] = 2; hiActive--; pumpHi(); };
+      hi[idx] = img;
+      img.onload = () => {
+        hiState[idx] = 2;
+        hiActive--;
+        evictHi();
+        pumpHi();
+      };
+      img.onerror = () => { hiState[idx] = 3; hiActive--; pumpHi(); };
       img.src = CFG.frames.hiPath + name(idx);
     }
   };
@@ -221,12 +317,23 @@ const frames = (() => {
   return {
     N,
     preloadLo,
-    startHi: () => pumpHi(),
-    setPlayhead: (i) => { current = i; if (hiEnabled) pumpHi(); },
+    startHi: () => { loStreaming = true; pumpLo(); pumpHi(); },
+    setPlayhead: (i) => {
+      current = clamp(Math.round(i), 0, N - 1);
+      pumpLo();
+      evictHi();
+      pumpHi();
+    },
     /* best available image for frame i; prefer hi only when settled */
     get: (i, settled) => {
       if (settled && hiState[i] === 2 && hi[i]) return hi[i];
-      return lo[i];
+      if (loState[i] === 2 && lo[i]) return lo[i];
+      for (let d = 1; d < N; d++) {
+        const a = i + d, b = i - d;
+        if (a < N && loState[a] === 2 && lo[a]) return lo[a];
+        if (b >= 0 && loState[b] === 2 && lo[b]) return lo[b];
+      }
+      return null;
     },
   };
 })();
@@ -654,18 +761,27 @@ const sanctum = (() => {
     state = "loading";
     veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
-    let done = 0;
+    let done = 0, next = 0, active = 0;
+    const limit = IS_TOUCH ? 4 : 6;
     const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
-    for (let i = 0; i < S.count; i++) {
-      const img = new Image();
-      img.decoding = "async";
-      img.onload = img.onerror = () => {
-        if (++done === S.count) unlock();
-        else if (done % 12 === 0) progressEl.textContent = Math.round(done / S.count * 100) + "%";
-      };
-      img.src = name(i);
-      imgs[i] = img;
-    }
+    const pump = () => {
+      while (active < limit && next < S.count) {
+        const i = next++;
+        const img = new Image();
+        img.decoding = "async";
+        imgs[i] = img;
+        active++;
+        img.onload = img.onerror = () => {
+          active--;
+          done++;
+          progressEl.textContent = Math.round(done / S.count * 100) + "%";
+          if (done === S.count) unlock();
+          else pump();
+        };
+        img.src = name(i);
+      }
+    };
+    pump();
   };
 
   const resize = () => {
@@ -961,6 +1077,55 @@ const finale = (() => {
     if (r.top < innerHeight * 0.78) { done = true; el.classList.add("shown"); audio.chime(); }
   };
   return { tick };
+})();
+
+/* The invitation and 3D world stay as separate routes. This transition starts
+   the heavier world only after a deliberate tap, then releases this page. */
+(() => {
+  const link = $("#world-portal-link"), overlay = $("#portal-transition");
+  if (!link || !overlay || REDUCED) return;
+  let leaving = false, navTimer = 0;
+
+  const reset = () => {
+    const shouldRestore = leaving || document.body.classList.contains("portal-opening");
+    leaving = false;
+    clearTimeout(navTimer);
+    document.body.classList.remove("portal-opening");
+    document.body.removeAttribute("aria-busy");
+    link.removeAttribute("aria-disabled");
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.style.removeProperty("--portal-x");
+    overlay.style.removeProperty("--portal-y");
+    if (shouldRestore) audio.restoreAfterWorld();
+  };
+
+  link.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (leaving) return;
+    leaving = true;
+
+    const visual = link.querySelector(".world-portal-visual");
+    const r = (visual || link).getBoundingClientRect();
+    overlay.style.setProperty("--portal-x", `${r.left + r.width / 2}px`);
+    overlay.style.setProperty("--portal-y", `${r.top + r.height / 2}px`);
+    overlay.setAttribute("aria-hidden", "false");
+    document.body.classList.add("portal-opening");
+    document.body.setAttribute("aria-busy", "true");
+    link.setAttribute("aria-disabled", "true");
+
+    audio.bell(540, 0.22, 1.3);
+    audio.whoosh(0.9);
+    audio.fadeForWorld(720);
+    document.querySelectorAll("video").forEach((video) => video.pause());
+
+    navTimer = setTimeout(() => {
+      try { location.assign(link.href); }
+      catch { location.href = link.href; }
+    }, 820);
+  });
+
+  addEventListener("pageshow", reset);
 })();
 
 const films = (() => {

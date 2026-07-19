@@ -1,81 +1,84 @@
-# Royal Wedding Invitation — Project Handoff
+# Royal Wedding Invitation + 3D World — Project Handoff
 
-A mobile-first, scroll-driven wedding invitation website. This document explains
-everything so anyone (or any AI assistant) can pick the project up and modify it.
+This package contains two deliberately separate experiences: the invitation at the
+root and the 3D wedding world under `world/`. Keeping separate routes is important:
+the WebGL bundle and its soundtrack download only after a guest chooses to enter.
 
-## Live site & repository
-- **Live site:** https://global0809.github.io/royal-wedding-invite/
-- **GitHub repo:** https://github.com/Global0809/royal-wedding-invite (account: Global0809)
-- **Hosting:** GitHub Pages, deploys automatically ~1–2 min after every push to `main`.
+## Experience map
 
-### How to deploy a change
-```
-cd scroll-site          # (or wherever the working copy lives)
-git add -A
-git commit -m "describe the change"
-git push
-```
-Then wait ~2 minutes and hard-refresh the live site.
-
-## What the website does (feature map)
-1. **The Seal (loader)** — gold mandala + wax seal; tap to open. Audio unlocks here.
-2. **Hero film** — a 15s origami video plays frame-by-frame as you scroll
-   (181 pre-extracted WebP frames, two quality tiers). Story beats fade in synced
-   to the film; a "crown" at the top shows the current chapter name.
-3. **Film band 1** — looping cinematic clip in a widescreen frame with animated gold border.
-4. **The Celebrations** — Haldi / Sangeet / Wedding / Reception cards with tilt + gold sheen.
-5. **A Hidden Blessing** — scratch-the-gold-foil card (canvas) with sound + reveal ceremony.
-6. **The Hidden Moment** — second origami film in a palace-arch portal; scrubs with
-   scroll for everyone, or with your palm height when Magic Mode (camera hand-tracking
-   via MediaPipe) is on.
-7. **Film band 2**, **Venue** (static tappable map → Google Maps), **RSVP**
-   (built-in styled form; swaps to a Google Form iframe if a real URL is configured).
-8. **The Grand Walk** — portrait film clip.
-9. **Finale** — full-screen night scene: "With love · Mishi & Mrigank" in gold
-   calligraphy, beating heart, date, hashtag.
-Plus throughout: falling petals, background flute score, bells/whooshes (Web Audio),
-live countdown, gold scroll-progress thread, paper-grain texture.
+1. **The Seal** — opening loader and the required user gesture that unlocks audio.
+2. **Hero film** — 181 origami WebP frames scrubbed by scroll with story beats.
+3. **Celebrations and films** — event cards and lazy cinematic clips.
+4. **Blessing and Hidden Moment** — scratch reveal plus a scroll/palm-driven film.
+5. **Venue and RSVP** — maps, live countdown and responsive RSVP sheet.
+6. **Finale** — names, wedding date and a palace gateway labelled `Enter the Portal`.
+7. **Portal handoff** — a short gold bloom, audio cross-fade and same-tab navigation.
+8. **3D wedding world** — the existing baraat experience, loaded only at this point.
 
 ## File structure
-```
-index.html        page structure (all sections)
-styles.css        all styling/animations (royal maroon-gold theme)
-app.js            the engine: frame scrub, petals, audio, scratch, magic mode,
-                  sanctum, film bands, countdown, RSVP, finale reveal
-config.js         ⭐ CLIENT CONFIG — names, date, events, venue, colors, RSVP url.
-                  Re-skin for a new client by editing ONLY this file.
+
+```text
+index.html                 invitation sections and portal markup
+styles.css                 invitation, gateway and transition design
+app.js                     animation, media, sound and portal controller
+config.js                  client names, dates, events, venue, theme and RSVP
 assets/
-  frames/lo|hi/   hero film frames (f_001…f_181.webp), 480px + 1152px tiers
-  frames2/        hidden-moment film frames (s_001…s_121.webp)
-  film/           looping mp4 clips (film1/2/3) + poster images
-  stills/         section artwork, scratch reveal, venue art, map image
-  decor/          background-removed cutouts (elephant, arch, toran, diya…)
-  audio/bgm.m4a   background score (looped)
-source/           ORIGINAL master files (videos, generated art) — not used by the
-                  site directly; keep as the editing masters
-README.md         template overview + how to swap the films
-HANDOFF.md        this file
+  frames/lo|hi/            hero frames (f_001…f_181.webp)
+  frames2/                 hidden-moment frames (s_001…s_121.webp)
+  film/                    lazy MP4 clips and posters
+  stills/                  section and venue artwork
+  decor/                   arch, elephant, toran, diya and other cutouts
+  audio/bgm.m4a            invitation background score
+world/
+  index.html               production entry for the 3D experience
+  assets/                  compiled world bundle and its soundtrack
+README.md                  operation and customization notes
+HANDOFF.md                 this file
 ```
 
-## Important technical notes for whoever edits next
-- **No frameworks, no build step.** Plain HTML/CSS/JS. Any static server runs it:
-  `npx http-server . -p 4173`
-- **`?tick` QA flag**: appending `?tick` to the URL drives animations with timers
-  instead of requestAnimationFrame — used for automated testing in headless
-  browsers. Real visitors never need it.
-- **Frame extraction** (if the hero film changes) requires ffmpeg:
-  ```
-  ffmpeg -i film.mp4 -vf "fps=12,scale=-2:480"  -c:v libwebp -quality 55 assets/frames/lo/f_%03d.webp
-  ffmpeg -i film.mp4 -vf "fps=12,scale=-2:1152" -c:v libwebp -quality 66 assets/frames/hi/f_%03d.webp
-  ```
-  then update `frames.count` in config.js and the beat `WINDOWS` in app.js.
-- **Weight budget matters**: videos are compressed to ~3MB each (crf 28, muted),
-  loaded lazily and played only while on screen. Keep any new media similarly lean.
-- Magic Mode loads MediaPipe from CDN **only when the user enables it**; camera
-  requires HTTPS (GitHub Pages provides it).
-- The audio file is the client's own licensed track — verify rights before
-  commercial resale.
+## Development and deployment
 
-## Couple/template values currently set
-- Names: Mishi & Mrigank (full: Mishi Agarwal weds Mrigank Singh Rathore)
-- Monogram: M · M — Date: 26 Nov 2026, Udaipur — Hashtag: #MishiWedsMrigank
+There is no build step for the invitation. Run from the package root with:
+
+```powershell
+npx.cmd --yes http-server . -p 4173
+```
+
+The 3D world is already a production Vite build with relative asset URLs. Deploy
+the whole folder tree unchanged to any static host; do not publish only the root
+HTML files or omit `world/assets/`.
+
+The original invitation repository/deployment may predate this local portal package.
+Do not assume a push there contains the 3D world until this complete folder has been
+merged and deployed.
+
+## Performance rules to preserve
+
+- Do not preload, prefetch or iframe the 3D route from the invitation.
+- Keep portal navigation in the same tab so the invitation's media/GPU work can be
+  released before WebGL initializes.
+- The seal gates only the first 70 low hero frames. Remaining low frames stream after
+  entry through a bounded queue.
+- High hero frames are desktop-only under suitable network/memory conditions and use
+  a small evicting playhead window; never restore the old all-181 high-frame sweep.
+- Sanctum frames use bounded concurrency. Videos and MediaPipe remain lazy.
+- Audio playback requires a user gesture in modern browsers. The seal provides it for
+  the invitation; the 3D world's own sound control remains the destination fallback.
+- Verify licensing for both supplied music tracks before public/commercial use.
+
+## Portal implementation notes
+
+- The destination is the semantic anchor `#world-portal-link` in `#finale`.
+- Standard clicks are enhanced for about 820 ms; modified clicks retain normal browser
+  behavior, and reduced-motion visitors navigate immediately.
+- The transition ends on the same dark-maroon radial gradient as the world loader,
+  avoiding a white flash.
+- `pageshow` resets the overlay and restores invitation audio after browser Back/bfcache.
+- Gateway imagery reuses `assets/decor/arch.webp` and
+  `assets/frames/lo/f_045.webp`; no extra portal image is required.
+
+## Current couple values
+
+- Mishi Agarwal and Mrigank Singh Rathore
+- 26 November 2026, Udaipur
+- `#MishiWedsMrigank`

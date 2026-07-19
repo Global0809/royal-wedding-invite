@@ -221,6 +221,24 @@
     <p class="finale-heart" aria-hidden="true">♥</p>
     <p class="finale-date">26th November 2026 · Udaipur</p>
     <p class="finale-tag">#MishiWedsMrigank</p>
+    <div class="world-gateway" aria-labelledby="world-gateway-title">
+      <p class="world-gateway-kicker">The celebration continues</p>
+      <a id="world-portal-link" class="world-portal-link" href="./world/index.html"
+         aria-labelledby="world-gateway-title world-gateway-hint">
+        <span class="world-portal-visual" aria-hidden="true">
+          <span class="world-portal-light"></span>
+          <img class="world-portal-scene" src="assets/frames/lo/f_045.webp" loading="lazy" decoding="async" alt="">
+          <img class="world-portal-arch" src="assets/decor/arch.webp" loading="lazy" decoding="async" alt="">
+          <i class="world-portal-spark spark-one"></i>
+          <i class="world-portal-spark spark-two"></i>
+          <i class="world-portal-spark spark-three"></i>
+        </span>
+        <span class="world-portal-action">
+          <strong id="world-gateway-title">Enter the Portal</strong>
+          <small id="world-gateway-hint">Walk with the baraat in the 3D wedding world</small>
+        </span>
+      </a>
+    </div>
   </footer>
 </section>
 
@@ -238,6 +256,15 @@
 
 <!-- Sound toggle -->
 <button id="sound-toggle" class="hidden" aria-label="Toggle sound">🔔</button>
+
+<!-- Full-screen handoff into the separately loaded 3D wedding world -->
+<div id="portal-transition" aria-hidden="true">
+  <div class="portal-transition-rays" aria-hidden="true"></div>
+  <p class="portal-transition-copy" role="status" aria-live="polite">
+    <span>॥ शुभ विवाह ॥</span>
+    <strong>Entering the wedding world</strong>
+  </p>
+</div>
 
 <script src="config.js"></script>
 <script src="app.js"></script>

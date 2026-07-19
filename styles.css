@@ -964,6 +964,9 @@ textarea.rf-input { resize: none; }
   .sec-head .eyebrow { opacity: .95; letter-spacing: .34em; }
   .flourish path, .flourish circle { stroke-dashoffset: 0 !important; }
   .flourish .gem { opacity: 1 !important; transform: scale(1) rotate(45deg) !important; }
+  #finale > * { opacity: 1; transform: none; }
+  #portal-transition,
+  body.portal-opening #portal-transition { clip-path: none; }
 }
 
 /* ═══════════════ FILM BANDS — cinematic loops ════════════ */
@@ -1085,6 +1088,7 @@ textarea.rf-input { resize: none; }
 #finale.shown > :nth-child(3) { transition-delay: .75s; }
 #finale.shown > :nth-child(4) { transition-delay: .95s; }
 #finale.shown > :nth-child(5) { transition-delay: 1.15s; }
+#finale.shown > :nth-child(6) { transition-delay: 1.35s; }
 .finale-eyebrow {
   display: flex; align-items: center; gap: 14px;
   font-family: var(--serif-display);
@@ -1141,4 +1145,232 @@ textarea.rf-input { resize: none; }
   text-transform: uppercase;
   color: var(--gold-soft);
   opacity: .92;
+}
+
+/* ═══════════════ WORLD GATEWAY — invitation → 3D celebration ═══════════════ */
+.world-gateway {
+  width: min(100%, 420px);
+  margin-top: clamp(36px, 7vh, 64px);
+  display: grid;
+  justify-items: center;
+  gap: 13px;
+}
+.world-gateway-kicker {
+  font-family: var(--serif-display);
+  font-size: 10.5px;
+  letter-spacing: .34em;
+  text-indent: .34em;
+  text-transform: uppercase;
+  color: rgba(244,235,219,.76);
+}
+.world-portal-link {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.world-portal-visual {
+  position: relative;
+  display: block;
+  width: min(64vw, 250px);
+  aspect-ratio: 1025 / 1126;
+  isolation: isolate;
+  transform: translateZ(0);
+  transition: transform .55s cubic-bezier(.2,.75,.25,1);
+}
+.world-portal-light {
+  position: absolute;
+  z-index: -1;
+  inset: 23% 15% 5%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 42%, rgba(255,246,199,.94), rgba(229,200,120,.4) 38%, transparent 72%);
+  opacity: .7;
+  transform: scale(.88);
+  animation: world-portal-breathe 3.4s ease-in-out infinite;
+}
+.world-portal-scene {
+  position: absolute;
+  z-index: 0;
+  left: 18%;
+  top: 29%;
+  width: 64%;
+  height: 58%;
+  object-fit: cover;
+  object-position: 50% 48%;
+  border-radius: 48% 48% 16% 16% / 32% 32% 12% 12%;
+  box-shadow: inset 0 0 0 1px rgba(255,239,184,.52), 0 0 30px rgba(229,200,120,.2);
+  filter: sepia(.08) saturate(.96) contrast(1.02);
+  transition: transform .75s cubic-bezier(.2,.75,.25,1), filter .5s ease;
+}
+.world-portal-arch {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 24px rgba(13,2,7,.34));
+}
+.world-portal-spark {
+  position: absolute;
+  z-index: 3;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff3bd;
+  box-shadow: 0 0 0 3px rgba(229,200,120,.16), 0 0 16px rgba(255,239,184,.88);
+  animation: world-portal-spark 2.8s ease-in-out infinite;
+}
+.spark-one { left: 15%; top: 39%; }
+.spark-two { right: 13%; top: 51%; animation-delay: -.9s; }
+.spark-three { left: 48%; top: 15%; animation-delay: -1.7s; }
+@keyframes world-portal-breathe {
+  0%, 100% { opacity: .52; transform: scale(.84); }
+  50% { opacity: .9; transform: scale(1.04); }
+}
+@keyframes world-portal-spark {
+  0%, 100% { opacity: .25; transform: scale(.65); }
+  45% { opacity: 1; transform: scale(1.18); }
+}
+.world-portal-action {
+  position: relative;
+  min-width: min(82vw, 292px);
+  min-height: 58px;
+  padding: 12px 22px 11px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  border: 1px solid rgba(229,200,120,.72);
+  border-radius: 999px;
+  background: linear-gradient(145deg, rgba(122,31,61,.96), rgba(51,8,24,.96));
+  box-shadow: inset 0 0 24px rgba(229,200,120,.09), 0 12px 30px rgba(12,2,7,.28);
+  transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.world-portal-action::before {
+  content: "";
+  position: absolute;
+  inset: -30% auto -30% -45%;
+  width: 34%;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,246,199,.18), transparent);
+  transition: left .7s ease;
+}
+.world-portal-action strong {
+  font-family: var(--serif-display);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .25em;
+  text-indent: .25em;
+  text-transform: uppercase;
+  color: #f6e7b6;
+}
+.world-portal-action small {
+  font-family: var(--serif-body);
+  font-size: 14px;
+  font-style: italic;
+  color: rgba(244,235,219,.76);
+}
+.world-portal-link:focus-visible { outline: none; }
+.world-portal-link:focus-visible .world-portal-action {
+  outline: 3px solid #fff0b5;
+  outline-offset: 4px;
+  box-shadow: 0 0 0 7px rgba(229,200,120,.16), 0 14px 34px rgba(12,2,7,.34);
+}
+.world-portal-link:active .world-portal-action { transform: scale(.98); }
+@media (hover: hover) {
+  .world-portal-link:hover .world-portal-visual { transform: translateY(-5px) scale(1.025); }
+  .world-portal-link:hover .world-portal-scene { transform: scale(1.075); filter: sepia(0) saturate(1.05) contrast(1.03); }
+  .world-portal-link:hover .world-portal-action {
+    border-color: rgba(255,239,184,.94);
+    box-shadow: inset 0 0 30px rgba(229,200,120,.13), 0 16px 38px rgba(12,2,7,.35);
+  }
+  .world-portal-link:hover .world-portal-action::before { left: 118%; }
+}
+
+/* The expanding veil ends on the exact night gradient used by the 3D loader. */
+#portal-transition {
+  --portal-x: 50vw;
+  --portal-y: 50vh;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  clip-path: circle(0 at var(--portal-x) var(--portal-y));
+  color: #f6e7b6;
+  background: radial-gradient(ellipse at 50% 60%, #2a1020 0%, #14060f 70%, #0a0512 100%);
+  transition: clip-path .82s cubic-bezier(.68,.05,.2,1), opacity .08s linear, visibility 0s linear .82s;
+}
+body.portal-opening {
+  overflow: hidden;
+  touch-action: none;
+}
+body.portal-opening #portal-transition {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  clip-path: circle(150vmax at var(--portal-x) var(--portal-y));
+  transition-delay: 0s;
+}
+.portal-transition-rays {
+  position: absolute;
+  width: 130vmax;
+  height: 130vmax;
+  border-radius: 50%;
+  opacity: 0;
+  background:
+    radial-gradient(circle, rgba(255,246,199,.96) 0 3%, rgba(229,200,120,.64) 8%, transparent 34%),
+    repeating-conic-gradient(from 0deg, rgba(255,239,184,.25) 0 5deg, transparent 5deg 15deg);
+  -webkit-mask-image: radial-gradient(circle, #000 0 10%, rgba(0,0,0,.88) 30%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 0 10%, rgba(0,0,0,.88) 30%, transparent 68%);
+}
+body.portal-opening .portal-transition-rays { animation: portal-bloom .78s ease-out forwards; }
+@keyframes portal-bloom {
+  0% { opacity: 0; transform: scale(.18) rotate(0deg); }
+  34% { opacity: .95; }
+  100% { opacity: 0; transform: scale(1.25) rotate(16deg); }
+}
+.portal-transition-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  padding: 28px;
+  opacity: 0;
+  transform: translateY(10px);
+  text-align: center;
+}
+.portal-transition-copy span {
+  font-family: var(--serif-dev);
+  font-size: 17px;
+  letter-spacing: .16em;
+  color: var(--gold-soft);
+}
+.portal-transition-copy strong {
+  font-family: var(--serif-display);
+  font-size: clamp(14px, 4vw, 19px);
+  font-weight: 500;
+  letter-spacing: .24em;
+  text-indent: .24em;
+  text-transform: uppercase;
+}
+body.portal-opening .portal-transition-copy {
+  opacity: 1;
+  transform: none;
+  transition: opacity .3s ease .23s, transform .45s ease .18s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #finale > * { opacity: 1; transform: none; }
+  #portal-transition,
+  body.portal-opening #portal-transition { clip-path: none; }
 }
