@@ -23,10 +23,13 @@ Open `http://127.0.0.1:4173/`. The portal route is
 - The 3D engine, scene bundle and world soundtrack are not requested until the
   visitor activates the portal. Same-tab navigation also lets the browser release
   the invitation's canvases, video decoders and camera resources before WebGL starts.
-- The gateway art reuses `assets/decor/arch.webp` and a low-tier hero frame already
-  needed by the invitation, so it adds no new media payload.
+- The gateway is a bright CSS-only golden-energy effect, so it adds no image,
+  video, canvas or library payload.
 - Reduced-motion visitors get immediate native navigation. Back navigation safely
   restores the invitation and its audio state.
+- The invitation passes sound intent to the same-origin world. Browsers that allow
+  it begin automatically; mobile Safari and other strict browsers receive a small
+  in-world `Enter with wedding music` gesture instead of silently failing.
 
 ## Performance behavior
 
@@ -66,6 +69,7 @@ folder while keeping relative asset paths.
 - Hidden-moment film, event cards, films, venue, live countdown and RSVP.
 - Licensed background score blended with synthesized bells and transition sounds.
 - Accessible, keyboard-operable portal with mobile-safe full-page handoff to WebGL.
+- Mobile sound gate with an explicit quiet option and a truthful playback indicator.
 
 Append `?tick` only for automated animation-loop QA in hidden tabs; visitors do not
 need it.

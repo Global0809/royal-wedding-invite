@@ -62,8 +62,10 @@ merged and deployed.
 - High hero frames are desktop-only under suitable network/memory conditions and use
   a small evicting playhead window; never restore the old all-181 high-frame sweep.
 - Sanctum frames use bounded concurrency. Videos and MediaPipe remain lazy.
-- Audio playback requires a user gesture in modern browsers. The seal provides it for
-  the invitation; the 3D world's own sound control remains the destination fallback.
+- Audio permission does not reliably cross a document navigation. The portal stores
+  only play/mute intent; the world attempts same-origin playback and, when a mobile
+  browser blocks it, retains its loader as an `Enter with wedding music` sound gate.
+  `Continue quietly` and the persistent speaker control remain available.
 - Verify licensing for both supplied music tracks before public/commercial use.
 
 ## Portal implementation notes
@@ -74,8 +76,8 @@ merged and deployed.
 - The transition ends on the same dark-maroon radial gradient as the world loader,
   avoiding a white flash.
 - `pageshow` resets the overlay and restores invitation audio after browser Back/bfcache.
-- Gateway imagery reuses `assets/decor/arch.webp` and
-  `assets/frames/lo/f_045.webp`; no extra portal image is required.
+- The gateway visual is CSS-only: one luminous core, mandala rays and an expanding
+  blessing ring. Keep it image-free and animate only opacity/transform.
 
 ## Current couple values
 

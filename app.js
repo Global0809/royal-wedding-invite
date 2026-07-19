@@ -1083,7 +1083,18 @@ const finale = (() => {
    the heavier world only after a deliberate tap, then releases this page. */
 (() => {
   const link = $("#world-portal-link"), overlay = $("#portal-transition");
-  if (!link || !overlay || REDUCED) return;
+  if (!link || !overlay) return;
+  const isPrimaryActivation = (e) => !e.defaultPrevented && e.button === 0
+    && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey;
+  const rememberAudioIntent = () => {
+    try {
+      sessionStorage.setItem("wedding-world-audio-intent", audio.isMuted() ? "muted" : "play");
+    } catch { /* private modes may restrict storage; the world still shows its sound gate */ }
+  };
+  if (REDUCED) {
+    link.addEventListener("click", (e) => { if (isPrimaryActivation(e)) rememberAudioIntent(); });
+    return;
+  }
   let leaving = false, navTimer = 0;
 
   const reset = () => {
@@ -1100,10 +1111,11 @@ const finale = (() => {
   };
 
   link.addEventListener("click", (e) => {
-    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (!isPrimaryActivation(e)) return;
     e.preventDefault();
     if (leaving) return;
     leaving = true;
+    rememberAudioIntent();
 
     const visual = link.querySelector(".world-portal-visual");
     const r = (visual || link).getBoundingClientRect();

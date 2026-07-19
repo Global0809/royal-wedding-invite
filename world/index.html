@@ -44,6 +44,46 @@
         color: var(--gold); letter-spacing: 3px; font-size: 15px;
         text-transform: uppercase; opacity: 0.85;
       }
+      .sound-entry {
+        display: none; width: min(86vw, 340px); justify-items: center; gap: 10px;
+      }
+      #loading.awaiting-sound { gap: 16px; }
+      #loading.awaiting-sound .diya-ring {
+        animation: none; transform: scale(.86); opacity: .7;
+        border-color: rgba(255,217,122,.35); box-shadow: 0 0 28px rgba(255,190,90,.34);
+      }
+      #loading.awaiting-sound .sound-entry {
+        display: grid; animation: sound-entry-in .55s cubic-bezier(.2,.75,.25,1) both;
+      }
+      #enterWithSound {
+        width: 100%; min-height: 62px; padding: 10px 18px; border-radius: 999px;
+        display: flex; align-items: center; justify-content: center; gap: 12px;
+        border: 1px solid rgba(255,217,122,.78);
+        color: #fff8dc; background: linear-gradient(145deg, rgba(110,26,50,.96), rgba(38,8,24,.97));
+        box-shadow: inset 0 0 24px rgba(255,217,122,.1), 0 0 28px rgba(255,190,90,.18);
+        font: inherit; cursor: pointer; touch-action: manipulation;
+      }
+      #enterWithSound .note { color: var(--gold-bright); font-size: 25px; line-height: 1; }
+      #enterWithSound .sound-copy { display: grid; gap: 3px; text-align: left; }
+      #enterWithSound strong { font-size: 13px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; }
+      #enterWithSound small { color: rgba(255,239,211,.72); font-size: 11px; letter-spacing: .3px; }
+      #continueQuiet {
+        min-height: 44px; padding: 8px 16px; border: 0; background: transparent;
+        color: rgba(255,235,205,.64); font: 12px/1.2 system-ui, sans-serif;
+        text-decoration: underline; text-underline-offset: 4px; cursor: pointer; touch-action: manipulation;
+      }
+      #enterWithSound:active { transform: scale(.98); }
+      #enterWithSound:focus-visible, #continueQuiet:focus-visible {
+        outline: 3px solid rgba(255,217,122,.92); outline-offset: 3px;
+      }
+      @keyframes sound-entry-in {
+        from { opacity: 0; transform: translateY(10px) scale(.97); }
+        to { opacity: 1; transform: none; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .diya-ring, .sound-entry { animation: none !important; }
+        #loading { transition-duration: .01s; }
+      }
 
       /* ---- Title card ---- */
       #titlecard {
@@ -131,6 +171,15 @@
         #hint .mobile-copy { display: block; max-width: 330px; margin: 0 auto; }
         #arrivalMoment { top: 15%; padding: 12px 18px 14px; backdrop-filter: none; -webkit-backdrop-filter: none; }
         #soundBtn { width: 48px; height: 48px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+        #soundBtn[aria-pressed="false"]::after {
+          content: "Tap for wedding music";
+          position: absolute; right: 56px; top: 50%; transform: translateY(-50%);
+          width: max-content; padding: 9px 12px; border-radius: 18px;
+          border: 1px solid rgba(255,217,122,.58); color: #fff2d6;
+          background: rgba(42,10,24,.9); box-shadow: 0 5px 18px rgba(10,2,8,.28);
+          font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px;
+          pointer-events: none;
+        }
         #followBtn {
           display: block; position: fixed;
           right: calc(env(safe-area-inset-right) + 14px);
@@ -145,7 +194,7 @@
       @media (max-height: 430px) and (orientation: landscape) {
         #hint { display: none; }
         #arrivalMoment { top: 7%; padding: 8px 14px 10px; }
-        #soundBtn { width: 40px; height: 40px; }
+        #soundBtn { width: 44px; height: 44px; }
         #followBtn { right: calc(env(safe-area-inset-right) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px); min-height: 44px; }
       }
 
@@ -156,7 +205,7 @@
         background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(20,4,12,0.35) 100%);
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-nFD3kL1E.js"></script>
+    <script type="module" crossorigin src="./assets/index-6M_btPKb.js"></script>
   </head>
   <body>
     <div id="root"></div>
@@ -171,7 +220,7 @@
 
     <div id="hint" class="serif">
       <span class="desktop-copy">Drag to orbit &middot; Scroll to zoom &middot; <b>W A S D</b> / arrows to fly &middot; Right-drag to pan</span>
-      <span class="mobile-copy">Drag to orbit &middot; Pinch to zoom<br />Two-finger drag to pan &middot; Tap Follow to rejoin</span>
+      <span class="mobile-copy">Drag to orbit &middot; Pinch to zoom<br />Two-finger drag to pan &middot; Tap Follow to rejoin &middot; Tap &#128266; for music</span>
     </div>
 
     <div id="arrivalMoment" class="serif" role="status" aria-live="polite" aria-hidden="true">
@@ -184,7 +233,17 @@
 
     <div id="loading" class="serif">
       <div class="diya-ring"></div>
-      <div class="msg">Lighting the diyas&hellip;</div>
+      <div class="msg" id="loadingMessage">Lighting the diyas&hellip;</div>
+      <div class="sound-entry" id="soundEntry" aria-hidden="true">
+        <button id="enterWithSound" type="button" aria-label="Enter the wedding world with music">
+          <span class="note" aria-hidden="true">&#9835;</span>
+          <span class="sound-copy">
+            <strong>Enter with wedding music</strong>
+            <small>One tap awakens the piano, bells and baraat</small>
+          </span>
+        </button>
+        <button id="continueQuiet" type="button">Continue quietly</button>
+      </div>
     </div>
 
   </body>
