@@ -1617,8 +1617,12 @@ const weddingSoundscape = createWeddingSoundscape({
   button: document.getElementById('soundBtn'),
   initialTrackTime: portalAudioTime,
 });
-if (portalAudioIntent === 'play') weddingSoundscape.start();
-else if (portalAudioIntent === 'muted') weddingSoundscape.stayMuted();
+/* The score starts by itself: attempt immediately (works when the browser
+   honors it), and the soundscape's own unlock listeners catch the first
+   natural gesture on stricter mobile browsers. Only an explicit mute from
+   the invitation keeps the world silent. */
+if (portalAudioIntent === 'muted') weddingSoundscape.stayMuted();
+else weddingSoundscape.start();
 
 function setAudioPhase(next, immediate = false) {
   weddingSoundscape.setPhase(next, immediate);

@@ -1,6 +1,6 @@
 const pianoTrackUrl = import.meta.env.DEV
-  ? '/src/assets/audio/wedding-score.m4a'
-  : new URL('../assets/audio/bgm.m4a', document.baseURI).href;
+  ? '/src/assets/audio/world-piano.m4a'
+  : new URL('../assets/audio/world-piano.m4a', document.baseURI).href;
 
 // The supplied piano cover is the musical heart of the experience. A compact
 // Web Audio layer adds ceremonial percussion, bells, shankh and firecrackers.
