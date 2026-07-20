@@ -99,7 +99,7 @@ const audio = (() => {
       if (token !== bgmFadeToken || !bgm) return;
       const p = Math.min(1, (now - started) / Math.max(1, duration));
       const eased = 1 - Math.pow(1 - p, 2);
-      bgm.volume = from + (target - from) * eased;
+      bgm.volume = clamp(from + (target - from) * eased, 0, 1);
       if (p < 1) requestAnimationFrame(step);
       else if (pauseAtEnd) bgm.pause();
     };
@@ -238,9 +238,10 @@ const HAS_CIB = typeof createImageBitmap === "function";
 const createBitmapRing = ({ count, url, keyPrefix, ahead, behind, limit }) => {
   const slot = new Array(count);
   const st = new Uint8Array(count);      // 0 none · 1 loading · 2 ready · 3 failed
-  let center = 0, dir = 1, active = 0, streaming = false, retained = true;
+  let center = 0, dir = 1, active = 0, streaming = false, retained = true, fullMode = false;
 
   const evict = () => {
+    if (fullMode) return;               // everything stays resident — zero churn while scrubbing
     const ka = retained ? ahead + 6 : 2;
     const kb = retained ? behind + 6 : 2;
     const lo = dir >= 0 ? center - kb : center - ka;
@@ -324,6 +325,28 @@ const createBitmapRing = ({ count, url, keyPrefix, ahead, behind, limit }) => {
       }
       return null;
     },
+    /* Decode the ENTIRE film up front — scrolling then never waits on
+       network or decode. onProgress gets 0..1; done fires at completion. */
+    prebufferAll: (onProgress, done) => {
+      fullMode = true;
+      streaming = true;
+      let readyCount = 0, next = 0, inFlight = 0;
+      const bump = () => {
+        readyCount++;
+        if (onProgress) onProgress(readyCount / count);
+        if (readyCount >= count && done) done();
+      };
+      const pump = () => {
+        while (inFlight < 6 && next < count) {
+          const i = next++;
+          if (st[i] === 2 || st[i] === 3) { bump(); continue; }
+          if (st[i] === 1) { setTimeout(() => { bump(); pump(); }, 300); continue; }
+          inFlight++;
+          load(i, () => { inFlight--; bump(); pump(); });
+        }
+      };
+      pump();
+    },
     prime: (i, im) => {
       if (i >= 0 && i < count && im && (im.naturalWidth || im.width)) {
         im._scrubKey = keyPrefix + i;
@@ -341,6 +364,10 @@ const RING_TIER = (() => {
   if (SAVE_DATA || slow || mem <= 2) return "lite";
   return mem < 4 ? "mid" : "full";
 })();
+
+/* Interpolation + full prebuffer: iPhones report no deviceMemory (assume 8). */
+const FULLBUFFER = RING_TIER === "full" && Number(navigator.deviceMemory || 8) >= 8;
+const INTERP = RING_TIER !== "lite";
 
 const frames = (() => {
   const N = CFG.frames.count;
@@ -368,6 +395,10 @@ const frames = (() => {
 
   /* Entry gate: robust retrying preload of the opening stretch. */
   const preloadLo = (onProgress) => new Promise((resolve, reject) => {
+    if (FULLBUFFER) {                    // decode all frames behind the seal screen
+      loRing.prebufferAll(onProgress, resolve);
+      return;
+    }
     if (!GATE) { resolve(); return; }
     let next = 0, readyCount = 0, inFlight = 0, finished = false;
     const attempts = new Uint8Array(GATE);
@@ -436,6 +467,13 @@ const frames = (() => {
       if (ln) return ln;
       return hiRing ? hiRing.nearest(i) : null;
     },
+    /* adjacent lo pair for cross-fade interpolation */
+    getPair: (i) => {
+      const a = loRing.ready(i) || loRing.nearest(i);
+      const b = i + 1 < N ? loRing.ready(i + 1) : null;
+      return { a, b };
+    },
+    getHi: (i) => (hiRing ? hiRing.ready(i) : null),
     prime: (i, im) => loRing.prime(i, im),
   };
 })();
@@ -483,51 +521,61 @@ const scrub = (() => {
 
   const IVORY = () => getComputedStyle(document.documentElement).getPropertyValue("--ivory").trim() || "#F4EBDB";
   let ivory = "#F4EBDB";
-  const draw = (img) => {
-    if (!imgW(img)) return false;
-    if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return; }
+  /* Cross-fade between adjacent frames: 12fps source becomes continuous
+     motion, because the eye sees a weighted blend, never a step. */
+  const drawBlend = (iA, frac, hi, fade) => {
+    const pair = frames.getPair(iA);
+    if (!imgW(pair.a)) return false;
+    if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return false; }
     const cw = canvas.width, ch = canvas.height;
-    // The world floats above the page; the CSS vignette feathers its edges.
-    const s = Math.min(cw / imgW(img), ch / imgH(img)) * 0.97;
-    const w = Math.round(imgW(img) * s), h = Math.round(imgH(img) * s);
-    const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
+    const base = pair.a;
+    const s = Math.min(cw / imgW(base), ch / imgH(base)) * 0.97;
+    const w = Math.round(imgW(base) * s), h = Math.round(imgH(base) * s);
     const x = Math.round((cw - w) / 2);
-    const y = Math.round(py);
+    const y = Math.round((ch - h) * 0.42);            // sit slightly above centre
     const nextBackdropKey = `${x}:${y}:${w}:${h}`;
     if (nextBackdropKey !== backdropKey) {
       ctx2d.fillStyle = ivory;
       ctx2d.fillRect(0, 0, cw, ch);
       backdropKey = nextBackdropKey;
     }
-    ctx2d.drawImage(img, x, y, w, h);
+    ctx2d.globalAlpha = 1;
+    ctx2d.drawImage(base, x, y, w, h);
+    if (INTERP && pair.b && frac > 0.02) {
+      ctx2d.globalAlpha = frac;
+      ctx2d.drawImage(pair.b, x, y, w, h);
+    }
+    if (hi && fade > 0.02) {
+      ctx2d.globalAlpha = fade;
+      ctx2d.drawImage(hi, x, y, w, h);
+    }
+    ctx2d.globalAlpha = 1;
     return true;
   };
 
-  let progress = 0;
+  let progress = 0, hiFade = 0;
   const tick = (dt) => {
     if (!active) return 0;
     progress = clamp((window.scrollY - scrollStart) / scrollDistance, 0, 1);
     target = progress * (frames.N - 1);
-    const gap = Math.abs(target - cur);
-    const response = IS_TOUCH ? (gap > 8 ? 30 : 22) : (gap > 10 ? 20 : 14);
-    cur = lerp(cur, target, 1 - Math.exp(-dt * response));
+    cur = lerp(cur, target, 1 - Math.exp(-dt * (IS_TOUCH ? 34 : 26)));
+    if (Math.abs(target - cur) < 0.003) cur = target;   // land exactly, stop chasing
     const vel = Math.abs(target - cur);
-    if (vel < 1.4) settledFrames++; else settledFrames = 0;
-    const i = Math.round(cur);
-    frames.setPlayhead(i);
-    const settled = settledFrames > 2;
-    frames.setHiCalm(settledFrames > 8);
-    const img = frames.get(i, settled);
-    const key = img?._scrubKey || "";
-    if (img && key !== drawn && draw(img)) drawn = key;
-
+    const iA = Math.min(Math.floor(cur), frames.N - 1);
+    const frac = cur - iA;
+    frames.setPlayhead(Math.round(cur));
+    // crisp hi-res frame fades in the moment motion calms, melts away on movement
+    hiFade = clamp(hiFade + (vel < 0.35 ? dt * 3.2 : -dt * 7), 0, 1);
+    const hi = hiFade > 0.02 ? frames.getHi(Math.round(cur)) : null;
+    const key = iA + ":" + ((frac * 24) | 0) + ":" + (hi ? ((hiFade * 12) | 0) : -1);
+    if (key !== drawn && drawBlend(iA, frac, hi, hiFade)) drawn = key;
     return vel;
   };
 
   return {
     resize, tick,
     getProgress: () => progress,
-    firstPaint: () => draw(frames.get(0, false)),
+    firstPaint: () => drawBlend(0, 0, null, 0),
   };
 })();
 
@@ -900,6 +948,13 @@ const sanctum = (() => {
     sec.classList.add("loading");
     veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
+    if (FULLBUFFER) {                    // hold the whole hidden film in hand
+      ring.prebufferAll(
+        (f) => { progressEl.textContent = Math.round(f * 100) + "%"; },
+        unlock
+      );
+      return;
+    }
     let done = 0, next = 0, inFlight = 0;
     const pump = () => {
       while (inFlight < 4 && next < gateCount) {
@@ -931,15 +986,23 @@ const sanctum = (() => {
     drawn = "";
   };
 
-  const pickFrame = (i) => ring.ready(i) || ring.nearest(i);
 
-  const draw = (img) => {
-    if (!imgW(img)) return false;
+  const drawPair = (iA, frac) => {
+    const a = ring.ready(iA) || ring.nearest(iA);
+    if (!imgW(a)) return false;
     if (canvas.width < 2) resize();
     const cw = canvas.width, ch = canvas.height;
-    const s = Math.max(cw / imgW(img), ch / imgH(img));
-    const w = imgW(img) * s, h = imgH(img) * s;
-    c.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
+    const s = Math.max(cw / imgW(a), ch / imgH(a));
+    const w = imgW(a) * s, h = imgH(a) * s;
+    const x = (cw - w) / 2, y = (ch - h) / 2;
+    c.globalAlpha = 1;
+    c.drawImage(a, x, y, w, h);
+    const b = INTERP && frac > 0.02 && iA + 1 < S.count ? ring.ready(iA + 1) : null;
+    if (b) {
+      c.globalAlpha = frac;
+      c.drawImage(b, x, y, w, h);
+    }
+    c.globalAlpha = 1;
     return true;
   };
 
@@ -948,8 +1011,7 @@ const sanctum = (() => {
     resize();
     ring.start();
     ring.setRetained(inView);
-    const first = pickFrame(0);
-    if (draw(first)) drawn = first._scrubKey;
+    if (drawPair(0, 0)) drawn = "s:0:0";
     sec.classList.remove("loading");
     sec.classList.add("unlocked");
     audio.bell(560, 0.5, 3.4);
@@ -967,15 +1029,17 @@ const sanctum = (() => {
     const gap = Math.abs(target - cur);
     const response = IS_TOUCH ? (gap > 8 ? 16 : 11) : (gap > 8 ? 12 : 8);
     cur = lerp(cur, target, 1 - Math.exp(-dt * response));
+    if (Math.abs(target - cur) < 0.003) cur = target;
     const i = Math.round(cur);
     const nextLoadCenter = Math.round(target);
     if (nextLoadCenter !== loadCenter) {
       loadCenter = nextLoadCenter;
       ring.setCenter(nextLoadCenter);
     }
-    const img = pickFrame(i);
-    const key = img?._scrubKey || "";
-    if (img && key !== drawn && draw(img)) drawn = key;
+    const iA = Math.min(Math.floor(cur), S.count - 1);
+    const frac = cur - iA;
+    const key = "s:" + iA + ":" + ((frac * 24) | 0);
+    if (key !== drawn && drawPair(iA, frac)) drawn = key;
     if (i !== progressFrame) {
       progressFrame = i;
       fillEl.style.transform = `scaleX(${(i / (S.count - 1)).toFixed(3)})`;
@@ -1112,7 +1176,8 @@ const finale = (() => {
     }, { rootMargin: "0px 0px -22% 0px", threshold: 0.01 });
     io.observe(el);
   } else if (el) {
-    tick = () => { if (el.getBoundingClientRect().top < innerHeight * 0.78) reveal(); };
+    let skip = 0;
+    tick = () => { if (++skip % 20 === 0 && el.getBoundingClientRect().top < innerHeight * 0.78) reveal(); };
   }
   return { tick };
 })();
