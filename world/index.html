@@ -11,17 +11,34 @@
         --gold-bright: #ffd97a;
         --burgundy: #4a0e18;
         --ink: #1a0a12;
+        --ui-font: "Comic Sans MS", "Comic Sans", "Chalkboard SE", "Comic Neue", cursive;
       }
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body {
         width: 100%; height: 100%; overflow: hidden; background: #0a0512;
-        overscroll-behavior: none;
+        overscroll-behavior: none; font-family: var(--ui-font);
+        -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
       }
       #root { position: fixed; inset: 0; }
       canvas { display: block; touch-action: none; }
 
-      /* Fonts: system serif fallback keeps it self-contained (no external fetch) */
-      .serif { font-family: "Cormorant Garamond", "Georgia", "Times New Roman", serif; }
+      /* Local fonts only: Chalkboard is the Apple fallback when Comic Sans is absent. */
+      button, .serif { font-family: var(--ui-font); }
+      .glass {
+        border: 1px solid rgba(255,255,255,0.28);
+        background:
+          linear-gradient(145deg, rgba(255,255,255,0.17), rgba(255,255,255,0.035) 52%),
+          rgba(47,12,27,0.42);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.34),
+          inset 0 -1px 0 rgba(255,195,112,0.11),
+          0 10px 30px rgba(13,3,12,0.28);
+        backdrop-filter: blur(14px) saturate(135%);
+        -webkit-backdrop-filter: blur(14px) saturate(135%);
+      }
+      @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .glass { background: rgba(47,12,27,0.84); }
+      }
 
       /* ---- Loading veil ---- */
       #loading {
@@ -41,125 +58,132 @@
       }
       @keyframes spin { to { transform: rotate(360deg); } }
       #loading .msg {
-        color: var(--gold); letter-spacing: 3px; font-size: 15px;
-        text-transform: uppercase; opacity: 0.85;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .diya-ring { animation: none !important; }
-        #loading { transition-duration: .01s; }
+        padding: 10px 16px; border-radius: 999px;
+        color: #fff1cf; letter-spacing: .04em; font-size: 14px; opacity: 1;
       }
 
       /* ---- Title card ---- */
       #titlecard {
-        position: fixed; left: 0; right: 0; top: 8%; z-index: 20;
+        position: fixed; left: 50%; right: auto; top: 6%; z-index: 20;
+        width: min(520px, calc(100vw - 40px)); border-radius: 28px;
         display: flex; flex-direction: column; align-items: center; text-align: center;
-        pointer-events: none; padding: 0 20px;
+        pointer-events: none; padding: 14px 24px 15px;
+        transform: translateX(-50%);
         transition: opacity 1.6s ease, transform 1.6s ease;
       }
-      #titlecard.gone { opacity: 0; transform: translateY(-14px); }
-      #titlecard .om { color: var(--gold-bright); font-size: 22px; letter-spacing: 6px; opacity: 0.9;
-        text-shadow: 0 0 18px rgba(255,190,90,0.5); }
+      #titlecard.gone { opacity: 0; transform: translate(-50%, -12px) scale(.98); }
+      #titlecard .om { color: var(--gold-bright); font-size: 13px; letter-spacing: .08em; opacity: 0.94;
+        text-shadow: 0 0 16px rgba(255,190,90,0.42); }
       #titlecard h1 {
-        color: #fff6e6; font-weight: 500; font-size: clamp(34px, 7vw, 74px);
-        letter-spacing: 2px; line-height: 1.05; margin: 6px 0 4px;
-        text-shadow: 0 2px 30px rgba(0,0,0,0.55), 0 0 40px rgba(255,180,90,0.28);
+        color: #fff8ec; font-weight: 700; font-size: clamp(30px, 5vw, 54px);
+        letter-spacing: .01em; line-height: 1.06; margin: 5px 0 3px;
+        text-shadow: 0 2px 24px rgba(0,0,0,0.48), 0 0 32px rgba(255,180,90,0.2);
       }
+      #titlecard .weds { font-size: .56em; opacity: .82; font-style: italic; font-weight: 400; }
       #titlecard .rule {
-        display: flex; align-items: center; gap: 12px; margin: 6px 0; opacity: 0.9;
+        display: flex; align-items: center; gap: 10px; margin: 5px 0; opacity: 0.9;
       }
-      #titlecard .rule span { height: 1px; width: min(90px, 22vw);
+      #titlecard .rule span { height: 1px; width: min(76px, 19vw);
         background: linear-gradient(90deg, transparent, var(--gold), transparent); }
-      #titlecard .rule b { color: var(--gold); font-size: 16px; font-weight: 400; }
-      #titlecard .sub { color: var(--gold); font-size: clamp(14px, 2.6vw, 19px);
-        letter-spacing: 4px; text-transform: uppercase; opacity: 0.82; }
+      #titlecard .rule b { color: var(--gold); font-size: 14px; font-weight: 400; }
+      #titlecard .sub { color: #f3d590; font-size: clamp(12px, 2vw, 14px);
+        letter-spacing: .08em; opacity: 0.92; }
 
-      /* ---- Hint ---- */
+      /* ---- Desktop hint + mobile auto-dismiss tips ---- */
       #hint {
-        position: fixed; left: 0; right: 0; bottom: 22px; z-index: 20; text-align: center;
-        color: rgba(255,235,205,0.7); font-size: 13px; letter-spacing: 2px;
-        text-transform: uppercase; pointer-events: none;
-        transition: opacity 1s ease;
+        position: fixed; left: 50%; right: auto; bottom: 22px; z-index: 20;
+        width: max-content; max-width: calc(100vw - 36px); padding: 9px 14px; border-radius: 999px;
+        color: rgba(255,244,224,0.84); font-size: 12px; line-height: 1.35;
+        letter-spacing: .015em; text-align: center; pointer-events: none;
+        transform: translateX(-50%); transition: opacity .55s ease, transform .55s ease;
       }
-      #hint.gone { opacity: 0; }
-      #hint .mobile-copy { display: none; }
+      #hint.gone { opacity: 0; transform: translate(-50%, 6px); }
+      #interactionTip {
+        position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 76px); z-index: 24;
+        display: none; align-items: center; justify-content: center; gap: 8px;
+        max-width: min(310px, calc(100vw - 34px)); padding: 10px 14px; border-radius: 999px;
+        color: rgba(255,248,235,.95); font-size: 12px; line-height: 1.3; text-align: center;
+        pointer-events: none; opacity: 0; transform: translate(-50%, 8px) scale(.98);
+        transition: opacity .32s ease, transform .32s ease;
+      }
+      #interactionTip.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+      #interactionTip .tip-mark { flex: 0 0 auto; color: var(--gold-bright); font-size: 11px; }
 
       /* ---- Arrival beat ---- */
       #arrivalMoment {
-        position: fixed; left: 50%; top: 18%; z-index: 22;
-        min-width: min(520px, calc(100vw - 36px)); padding: 14px 24px 16px;
+        position: fixed; left: 50%; top: 16%; z-index: 22;
+        width: min(460px, calc(100vw - 36px)); padding: 13px 22px 15px; border-radius: 25px;
         text-align: center; pointer-events: none;
-        color: #fff6e6; border: 1px solid rgba(255,217,122,0.48);
-        background: linear-gradient(135deg, rgba(74,14,24,0.88), rgba(26,10,18,0.72));
-        box-shadow: 0 12px 45px rgba(20,4,10,0.4), inset 0 0 28px rgba(255,190,90,0.08);
-        backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+        color: #fff8ec;
         opacity: 0; transform: translate(-50%, -12px) scale(0.96);
         transition: opacity 0.65s ease, transform 0.65s ease;
       }
       #arrivalMoment.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-      #arrivalMoment .eyebrow { color: var(--gold); font-size: 11px; letter-spacing: 4px; text-transform: uppercase; }
-      #arrivalMoment .arrival-title { margin-top: 4px; font-size: clamp(24px, 5vw, 42px); font-weight: 500; letter-spacing: 1px; }
+      #arrivalMoment .eyebrow { color: #f3d590; font-size: 12px; letter-spacing: .04em; }
+      #arrivalMoment .arrival-title { margin-top: 3px; font-size: clamp(24px, 4vw, 36px); font-weight: 700; letter-spacing: .01em; }
 
       /* ---- Sound + one unobtrusive mobile follow control ---- */
       #soundBtn {
         position: fixed; top: calc(env(safe-area-inset-top) + 14px); right: calc(env(safe-area-inset-right) + 14px);
         z-index: 25; width: 44px; height: 44px; border-radius: 50%;
-        border: 1px solid rgba(233,196,106,0.5); background: rgba(26,10,18,0.55);
-        color: var(--gold); font-size: 20px; cursor: pointer; touch-action: manipulation;
-        backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); line-height: 1;
+        color: var(--gold-bright); font-size: 19px; cursor: pointer; touch-action: manipulation; line-height: 1;
+        transition: transform .18s ease, background .18s ease;
       }
       #followBtn {
-        display: none; border: 1px solid rgba(255,217,122,0.58);
-        color: #fff2d6; background: rgba(42,10,24,0.76);
-        box-shadow: 0 5px 20px rgba(10,2,8,0.3), inset 0 0 16px rgba(255,190,90,0.07);
-        font: 600 12px/1 system-ui, sans-serif; letter-spacing: 1px; text-transform: uppercase;
+        display: none; align-items: center; justify-content: center; gap: 7px;
+        color: #fff8eb; font: 700 13px/1 var(--ui-font); letter-spacing: .01em;
         touch-action: manipulation; user-select: none; -webkit-user-select: none;
       }
-      #soundBtn:active, #followBtn:active { background: rgba(124,33,46,0.88); }
+      #followBtn::before { content: "\2726"; color: var(--gold-bright); font-size: 11px; }
+      #soundBtn:active { transform: scale(.96); background: rgba(124,33,46,.7); }
       #soundBtn:focus-visible, #followBtn:focus-visible {
         outline: 3px solid rgba(255,217,122,0.9); outline-offset: 3px;
       }
 
       @media (max-width: 900px), (pointer: coarse) {
-        #titlecard { top: 5%; padding: 0 12px; }
+        .glass {
+          backdrop-filter: blur(8px) saturate(120%);
+          -webkit-backdrop-filter: blur(8px) saturate(120%);
+        }
+        #titlecard {
+          top: calc(env(safe-area-inset-top) + 10px); width: calc(100vw - 28px);
+          max-width: 430px; padding: 11px 15px 12px; border-radius: 23px;
+        }
         #titlecard h1 {
-          font-size: clamp(23px, 7.2vw, 40px); letter-spacing: 0.2px;
+          font-size: clamp(24px, 7vw, 34px); letter-spacing: .005em;
           white-space: nowrap;
         }
-        #titlecard .om { font-size: 18px; letter-spacing: 4px; }
-        #titlecard .sub { font-size: clamp(12px, 3.8vw, 17px); letter-spacing: 3px; }
-        #hint {
-          bottom: calc(env(safe-area-inset-bottom) + 74px); padding: 0 26px;
-          font-size: 10px; line-height: 1.45; letter-spacing: 1px;
-        }
-        #hint .desktop-copy { display: none; }
-        #hint .mobile-copy { display: block; max-width: 330px; margin: 0 auto; }
-        #arrivalMoment { top: 15%; padding: 12px 18px 14px; backdrop-filter: none; -webkit-backdrop-filter: none; }
-        #soundBtn { width: 48px; height: 48px; backdrop-filter: none; -webkit-backdrop-filter: none; }
-        #soundBtn[aria-pressed="false"]::after {
-          content: "Tap for wedding music";
-          position: absolute; right: 56px; top: 50%; transform: translateY(-50%);
-          width: max-content; padding: 9px 12px; border-radius: 18px;
-          border: 1px solid rgba(255,217,122,.58); color: #fff2d6;
-          background: rgba(42,10,24,.9); box-shadow: 0 5px 18px rgba(10,2,8,.28);
-          font: 600 11px/1 system-ui, sans-serif; letter-spacing: .4px;
-          pointer-events: none;
-        }
+        #titlecard .om { font-size: 12px; }
+        #titlecard .sub { font-size: 12px; }
+        #hint { display: none; }
+        #interactionTip { display: flex; }
+        #arrivalMoment { top: calc(env(safe-area-inset-top) + 84px); padding: 11px 16px 13px; }
+        #soundBtn { width: 46px; height: 46px; }
         #followBtn {
-          display: block; position: fixed;
+          display: flex; position: fixed;
           right: calc(env(safe-area-inset-right) + 14px);
           bottom: calc(env(safe-area-inset-bottom) + 14px);
-          z-index: 25; min-width: 118px; min-height: 48px; padding: 0 16px; border-radius: 24px;
+          z-index: 25; min-width: 132px; min-height: 44px; padding: 0 15px; border-radius: 999px;
           visibility: hidden; opacity: 0; pointer-events: none; transform: translateY(8px);
           transition: opacity 0.25s ease, transform 0.25s ease, background 0.15s ease;
         }
         #followBtn.show { visibility: visible; opacity: 1; pointer-events: auto; transform: translateY(0); }
+        #followBtn.show:active { transform: translateY(0) scale(.97); }
       }
 
       @media (max-height: 430px) and (orientation: landscape) {
         #hint { display: none; }
+        #interactionTip { bottom: calc(env(safe-area-inset-bottom) + 62px); }
         #arrivalMoment { top: 7%; padding: 8px 14px 10px; }
         #soundBtn { width: 44px; height: 44px; }
         #followBtn { right: calc(env(safe-area-inset-right) + 8px); bottom: calc(env(safe-area-inset-bottom) + 8px); min-height: 44px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .diya-ring { animation: none !important; }
+        #loading, #titlecard, #hint, #interactionTip, #arrivalMoment, #soundBtn, #followBtn {
+          transition-duration: .01ms !important;
+        }
       }
 
       /* ---- Vignette for cinematic framing ---- */
@@ -169,35 +193,39 @@
         background: radial-gradient(ellipse at 50% 42%, transparent 55%, rgba(20,4,12,0.35) 100%);
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-dCd-8XEf.js"></script>
+    <script type="module" crossorigin src="./assets/index-B1T4BGoW.js"></script>
   </head>
   <body>
     <div id="root"></div>
     <div id="vignette"></div>
 
-    <div id="titlecard" class="serif">
+    <div id="titlecard" class="serif glass">
       <div class="om">॥ शुभ विवाह ॥</div>
-      <h1>Mishi <span style="font-size:0.6em; opacity:0.85; font-style:italic;">weds</span> Mrigank</h1>
+      <h1>Mishi <span class="weds">weds</span> Mrigank</h1>
       <div class="rule"><span></span><b>&#10022;</b><span></span></div>
       <div class="sub">A Royal Baraat</div>
     </div>
 
-    <div id="hint" class="serif">
+    <div id="hint" class="serif glass">
       <span class="desktop-copy">Drag to orbit &middot; Scroll to zoom &middot; <b>W A S D</b> / arrows to fly &middot; Right-drag to pan</span>
-      <span class="mobile-copy">Drag to orbit &middot; Pinch to zoom<br />Two-finger drag to pan &middot; Tap Follow to rejoin &middot; Tap &#128266; for music</span>
     </div>
 
-    <div id="arrivalMoment" class="serif" role="status" aria-live="polite" aria-hidden="true">
+    <div id="interactionTip" class="serif glass" role="status" aria-live="polite" aria-atomic="true" aria-hidden="true">
+      <span class="tip-mark" aria-hidden="true">&#10022;</span>
+      <span id="interactionTipText"></span>
+    </div>
+
+    <div id="arrivalMoment" class="serif glass" role="status" aria-live="polite" aria-hidden="true">
       <div class="eyebrow">The baraat has arrived</div>
       <div class="arrival-title">Mishi &amp; Mrigank</div>
     </div>
 
-    <button id="soundBtn" type="button" title="Play wedding music" aria-label="Play wedding music" aria-pressed="false">&#128263;</button>
-    <button id="followBtn" type="button" aria-label="Resume following the baraat">Follow Baraat</button>
+    <button id="soundBtn" class="glass" type="button" title="Play wedding music" aria-label="Play wedding music" aria-pressed="false">&#128263;</button>
+    <button id="followBtn" class="glass" type="button" aria-label="Resume following the baraat">Follow baraat</button>
 
     <div id="loading" class="serif">
       <div class="diya-ring"></div>
-      <div class="msg" id="loadingMessage">Lighting the diyas&hellip;</div>
+      <div class="msg glass" id="loadingMessage">Lighting the diyas&hellip;</div>
     </div>
 
   </body>

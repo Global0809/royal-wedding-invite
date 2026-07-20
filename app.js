@@ -1393,7 +1393,11 @@ const films = (() => {
             frag.appendChild(s);
           }
           node.replaceChild(frag, n);
-        } else if (n.nodeType === 1) { n.classList.add("ltr"); n.style.setProperty("--li", li++); }
+        } else if (n.nodeType === 1) {
+          n.classList.add("ltr");
+          n.style.setProperty("--li", li++);
+          n.setAttribute("aria-hidden", "true");
+        }
       });
     };
     split(names);
@@ -1412,6 +1416,25 @@ const films = (() => {
     es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("shown"); headIO.unobserve(e.target); } });
   }, { threshold: 0.5 });
   document.querySelectorAll(".sec-head").forEach((h) => headIO.observe(h));
+
+  /* One quiet entrance per major glass surface. Nothing follows the scroll
+     frame-by-frame: once visible, each observer releases its element. */
+  const revealItems = document.querySelectorAll(
+    ".countdown-card, .film-band, #scratch-wrap, .venue-card, .rsvp-block"
+  );
+  revealItems.forEach((el) => el.classList.add("soft-reveal"));
+  if (REDUCED || !("IntersectionObserver" in window)) {
+    revealItems.forEach((el) => el.classList.add("revealed"));
+  } else {
+    const revealIO = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("revealed");
+        revealIO.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -8%", threshold: 0.12 });
+    revealItems.forEach((el) => revealIO.observe(el));
+  }
 
   /* Tap sparkle — a pinch of petals wherever a finger lands */
   let lastSpark = 0;
