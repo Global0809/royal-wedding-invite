@@ -11,8 +11,8 @@
   --ivory: #F4EBDB;
   --ink: #3A2230;
   --vh: 1vh; /* corrected by JS to avoid URL-bar jumps */
-  --serif-display: "Comic Neue", "Chalkboard SE", "Comic Sans MS", "Segoe Print", cursive;
-  --serif-body: "Comic Neue", "Chalkboard SE", "Comic Sans MS", "Segoe Print", cursive;
+  --serif-display: "Cinzel", serif;
+  --serif-body: "Cormorant Garamond", serif;
   --serif-dev: "Noto Serif Devanagari", serif;
   --glass-fill: linear-gradient(145deg, rgba(255,255,255,.76), rgba(255,247,225,.54));
   --glass-stroke: rgba(255,255,255,.78);
@@ -1346,9 +1346,9 @@ textarea.rf-input { resize: none; }
 }
 .fe-rule:last-child { transform: scaleX(-1); }
 .finale-script {
-  font-family: var(--serif-display);
-  font-weight: 700;
-  font-size: clamp(42px, 13vw, 82px);
+  font-family: "Great Vibes", cursive;
+  font-weight: 400;
+  font-size: clamp(52px, 15vw, 96px);
   line-height: 1.25;
   padding: 0 10px 12px;
   margin: 10px 0 0;
