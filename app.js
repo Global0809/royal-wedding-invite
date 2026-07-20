@@ -225,256 +225,218 @@ const audio = (() => {
   };
 })();
 
-/* ═══════════════ FRAME STORE — two-tier loader ═══════════ */
-const frames = (() => {
-  const N = CFG.frames.count;
-  const lo = new Array(N), hi = new Array(N);
-  const loState = new Uint8Array(N);          // 0 none · 1 loading · 2 ready · 3 failed
-  const hiState = new Uint8Array(N);
-  const name = (i) => CFG.frames.prefix + String(i + 1).padStart(3, "0") + CFG.frames.ext;
-  const memory = Number(navigator.deviceMemory || 8);
-  const lowMemory = memory <= 2;
-  const connection = navigator.connection || {};
-  const slowConnection = /(^|-)2g$/.test(connection.effectiveType || "");
-  const hiEnabled = !SAVE_DATA && !IS_TOUCH && !slowConnection && innerWidth >= 900 && memory >= 4;
-  // Prepare roughly one full viewport of decoded frames before the doors open.
-  // The longer seal screen prevents a cold swipe from outrunning the runway.
-  const GATE_TARGET = SAVE_DATA ? 10 : lowMemory ? 30 : IS_TOUCH ? 44 : 54;
-  const GATE = Math.min(GATE_TARGET, N);
-  const GATE_LIMIT = SAVE_DATA ? 1 : lowMemory ? 2 : IS_TOUCH ? 3 : 5;
-  const LO_LIMIT = SAVE_DATA ? 1 : lowMemory ? 2 : IS_TOUCH ? 3 : 5;
-  const LO_AHEAD = SAVE_DATA ? 12 : lowMemory ? 34 : IS_TOUCH ? 52 : 62;
-  const LO_BEHIND = IS_TOUCH ? 10 : 12;
-  const LO_KEEP_AHEAD = LO_AHEAD + 4;
-  const LO_KEEP_BEHIND = LO_BEHIND + 4;
-  // High frames are large (~8.5 MiB decoded each), so upgrade calmly and singly.
-  const HI_LIMIT = 1, HI_RADIUS = 1, HI_KEEP = 2;
-  let loActive = 0, loStreaming = false, demandActive = true;
-  let hiActive = 0, current = 0, hiStarted = false, hiCalm = false;
+/* ═══════════════ FRAME RINGS — pre-decoded bitmap streaming ═
+   The old engine decoded images on demand during scroll (decode
+   hitches = lag). This one decodes OFF the main thread into
+   ImageBitmaps held in a direction-aware ring around the playhead,
+   so drawing is always a cheap GPU blit. Evicted bitmaps are
+   closed, keeping memory bounded. */
+const imgW = (im) => (im && (im.naturalWidth || im.width)) || 0;
+const imgH = (im) => (im && (im.naturalHeight || im.height)) || 0;
+const HAS_CIB = typeof createImageBitmap === "function";
 
-  const evictLo = () => {
-    if (!loStreaming) return;
-    const keepAhead = demandActive ? LO_KEEP_AHEAD : 3;
-    const keepBehind = demandActive ? LO_KEEP_BEHIND : 3;
-    for (let i = 0; i < N; i++) {
-      if (loState[i] === 2 && (i < current - keepBehind || i > current + keepAhead)) {
-        if (lo[i]) {
-          lo[i].onload = lo[i].onerror = null;
-          lo[i].src = "";
-        }
-        lo[i] = null;
-        loState[i] = 0;
+const createBitmapRing = ({ count, url, keyPrefix, ahead, behind, limit }) => {
+  const slot = new Array(count);
+  const st = new Uint8Array(count);      // 0 none · 1 loading · 2 ready · 3 failed
+  let center = 0, dir = 1, active = 0, streaming = false, retained = true;
+
+  const evict = () => {
+    const ka = retained ? ahead + 6 : 2;
+    const kb = retained ? behind + 6 : 2;
+    const lo = dir >= 0 ? center - kb : center - ka;
+    const hi = dir >= 0 ? center + ka : center + kb;
+    for (let i = 0; i < count; i++) {
+      if (st[i] === 2 && (i < lo || i > hi)) {
+        const b = slot[i];
+        if (b && typeof b.close === "function") { try { b.close(); } catch {} }
+        slot[i] = null;
+        st[i] = 0;
       }
     }
   };
 
-  const loadLo = (i, done) => {
-    if (i < 0 || i >= N || loState[i] !== 0) return false;
-    loState[i] = 1;
-    loActive++;
-    const img = new Image();
-    img.decoding = "async";
-    img._scrubKey = `lo-${i}`;
-    if (loStreaming) {
-      const distance = Math.abs(i - current);
-      img.fetchPriority = SAVE_DATA ? "low" : distance <= 4 ? "high" : "auto";
+  const load = (i, done) => {
+    if (i < 0 || i >= count || st[i] !== 0) return false;
+    st[i] = 1;
+    active++;
+    const finish = (im) => {
+      if (im) { im._scrubKey = keyPrefix + i; slot[i] = im; st[i] = 2; }
+      else { slot[i] = null; st[i] = 3; }
+      active--;
+      if (done) done(!!im);
+    };
+    if (HAS_CIB) {
+      fetch(url(i))
+        .then((r) => { if (!r.ok) throw 0; return r.blob(); })
+        .then((blob) => createImageBitmap(blob))
+        .then(finish, () => finish(null));
+    } else {
+      const im = new Image();
+      im.decoding = "async";
+      im.onload = () => {
+        if (typeof im.decode === "function") im.decode().then(() => finish(im), () => finish(im));
+        else finish(im);
+      };
+      im.onerror = () => finish(null);
+      im.src = url(i);
     }
-    lo[i] = img;
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      loState[i] = img.naturalWidth ? 2 : 3;
-      loActive--;
-      evictLo();
-      if (done) done(loState[i] === 2);
-    };
-    const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
-    img.onload = () => {
-      if (typeof img.decode === "function") img.decode().then(settle, settle);
-      else settle();
-    };
-    img.onerror = settle;
-    img.src = CFG.frames.loPath + name(i);
     return true;
   };
 
-  /* Entry is gated on the first GATE frames only; the rest stream behind
-     the opened doors. No request for the remaining frames is made up front. */
+  const pump = () => {
+    if (!streaming || !retained) return;
+    while (active < limit) {
+      let idx = -1;
+      const fwd = dir >= 0;
+      const aSpan = fwd ? ahead : behind, bSpan = fwd ? behind : ahead;
+      for (let d = 0; d <= aSpan; d++) {
+        const i = center + d;
+        if (i < count && st[i] === 0) { idx = i; break; }
+      }
+      if (idx < 0) for (let d = 1; d <= bSpan; d++) {
+        const i = center - d;
+        if (i >= 0 && st[i] === 0) { idx = i; break; }
+      }
+      if (idx < 0 || !load(idx, pump)) return;
+    }
+  };
+
+  return {
+    load,
+    reset: (i) => { if (st[i] === 3) st[i] = 0; },
+    start: () => { if (!streaming) { streaming = true; pump(); } },
+    setRetained: (next) => { retained = next; if (next) pump(); else evict(); },
+    setCenter: (i) => {
+      const c = clamp(i, 0, count - 1);
+      if (c === center) return;
+      dir = c > center ? 1 : -1;
+      center = c;
+      pump();
+      evict();
+    },
+    ready: (i) => (st[i] === 2 ? slot[i] : null),
+    nearest: (i, maxD = count) => {
+      if (st[i] === 2) return slot[i];
+      for (let d = 1; d <= maxD; d++) {
+        const a = i + d, b = i - d;
+        if (a < count && st[a] === 2) return slot[a];
+        if (b >= 0 && st[b] === 2) return slot[b];
+      }
+      return null;
+    },
+    prime: (i, im) => {
+      if (i >= 0 && i < count && im && (im.naturalWidth || im.width)) {
+        im._scrubKey = keyPrefix + i;
+        slot[i] = im;
+        st[i] = 2;
+      }
+    },
+  };
+};
+
+/* Capability tier — iPhones report no deviceMemory, so assume capable there. */
+const RING_TIER = (() => {
+  const mem = Number(navigator.deviceMemory || 8);
+  const slow = /(^|-)2g$/.test((navigator.connection || {}).effectiveType || "");
+  if (SAVE_DATA || slow || mem <= 2) return "lite";
+  return mem < 4 ? "mid" : "full";
+})();
+
+const frames = (() => {
+  const N = CFG.frames.count;
+  const name = (i) => CFG.frames.prefix + String(i + 1).padStart(3, "0") + CFG.frames.ext;
+  const T = RING_TIER;
+  const hiEnabled = T !== "lite";
+  const loRing = createBitmapRing({
+    count: N,
+    url: (i) => CFG.frames.loPath + name(i),
+    keyPrefix: "lo-",
+    ahead: T === "full" ? 64 : T === "mid" ? 44 : 28,
+    behind: T === "full" ? 18 : 12,
+    limit: T === "lite" ? 2 : 4,
+  });
+  const hiRing = hiEnabled ? createBitmapRing({
+    count: N,
+    url: (i) => CFG.frames.hiPath + name(i),
+    keyPrefix: "hi-",
+    ahead: T === "full" ? 24 : 12,
+    behind: T === "full" ? 10 : 5,
+    limit: T === "full" ? 4 : 3,
+  }) : null;
+  const GATE = Math.min(T === "lite" ? 24 : IS_TOUCH ? 40 : 50, N);
+  const GATE_LIMIT = T === "lite" ? 2 : 5;
+
+  /* Entry gate: robust retrying preload of the opening stretch. */
   const preloadLo = (onProgress) => new Promise((resolve, reject) => {
     if (!GATE) { resolve(); return; }
-    let next = 0, readyCount = 0, finished = false;
-    const retryQueue = [];
+    let next = 0, readyCount = 0, inFlight = 0, finished = false;
     const attempts = new Uint8Array(GATE);
-    const MAX_GATE_ATTEMPTS = 5;
-    const finish = () => {
-      if (finished) return;
-      finished = true;
-      resolve();
-    };
-    const fail = (idx) => {
-      if (finished) return;
-      finished = true;
-      reject(new Error(`Opening frame ${idx + 1} could not be prepared`));
-    };
-    const queueRetry = (idx) => {
-      const delay = Math.min(3200, 350 * Math.pow(1.8, Math.min(attempts[idx], 5)));
-      setTimeout(() => {
-        if (finished) return;
-        if (loState[idx] === 3) loState[idx] = 0;
-        retryQueue.push(idx);
-        pumpGate();
-      }, delay);
-    };
+    const retryQueue = [];
+    const MAX_ATTEMPTS = 5;
     const pumpGate = () => {
       if (finished) return;
-      while (!finished && loActive < GATE_LIMIT && (retryQueue.length || next < GATE)) {
+      while (!finished && inFlight < GATE_LIMIT && (retryQueue.length || next < GATE)) {
         const idx = retryQueue.length ? retryQueue.shift() : next++;
-        if (loState[idx] === 3) loState[idx] = 0;
-        attempts[idx] = Math.min(attempts[idx] + 1, 20);
-        const started = loadLo(idx, (ready) => {
+        loRing.reset(idx);
+        attempts[idx]++;
+        inFlight++;
+        const started = loRing.load(idx, (ok) => {
+          inFlight--;
           if (finished) return;
-          if (ready) {
+          if (ok) {
             readyCount++;
             onProgress(readyCount / GATE);
-            if (readyCount === GATE) { finish(); return; }
-          } else if (attempts[idx] >= MAX_GATE_ATTEMPTS) {
-            fail(idx);
+            if (readyCount === GATE) { finished = true; resolve(); return; }
+          } else if (attempts[idx] >= MAX_ATTEMPTS) {
+            finished = true;
+            reject(new Error("Opening frame " + (idx + 1) + " could not be prepared"));
             return;
-          } else queueRetry(idx);
+          } else {
+            setTimeout(() => {
+              if (finished) return;
+              retryQueue.push(idx);
+              pumpGate();
+            }, Math.min(3200, 350 * Math.pow(1.8, attempts[idx])));
+          }
           pumpGate();
         });
-        if (!started && loState[idx] !== 2) {
-          if (attempts[idx] >= MAX_GATE_ATTEMPTS) fail(idx);
-          else queueRetry(idx);
-        }
+        if (!started) inFlight--;
       }
     };
     pumpGate();
   });
 
-  const pumpLo = () => {
-    if (!loStreaming || !demandActive) return;
-    while (loActive < LO_LIMIT) {
-      let idx = -1;
-      for (let d = 0; d <= LO_AHEAD; d++) {
-        const a = current + d;
-        if (a < N && loState[a] === 0) { idx = a; break; }
-      }
-      if (idx < 0) {
-        for (let d = 1; d <= LO_BEHIND; d++) {
-          const b = current - d;
-          if (b >= 0 && loState[b] === 0) { idx = b; break; }
-        }
-      }
-      if (idx < 0 || !loadLo(idx, pumpLo)) return;
-    }
-  };
-
-  const evictHi = () => {
-    const keep = demandActive ? HI_KEEP : 1;
-    for (let i = 0; i < N; i++) {
-      if (hiState[i] === 2 && Math.abs(i - current) > keep) {
-        if (hi[i]) {
-          hi[i].onload = hi[i].onerror = null;
-          hi[i].src = "";
-        }
-        hi[i] = null;
-        hiState[i] = 0;
-      }
-    }
-  };
-
-  const pumpHi = () => {
-    if (!hiEnabled || !hiStarted || !demandActive || !hiCalm) return;
-    while (hiActive < HI_LIMIT) {
-      let idx = -1;
-      for (let d = 0; d <= HI_RADIUS; d++) {
-        const a = current + d, b = current - d;
-        if (a < N && hiState[a] === 0) { idx = a; break; }
-        if (b >= 0 && hiState[b] === 0) { idx = b; break; }
-      }
-      if (idx === -1) return;
-      hiState[idx] = 1; hiActive++;
-      const img = new Image();
-      img.decoding = "async";
-      img._scrubKey = `hi-${idx}`;
-      hi[idx] = img;
-      let settled = false;
-      const finish = (ready) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        hiState[idx] = ready ? 2 : 3;
-        hiActive--;
-        if (ready) evictHi();
-        pumpHi();
-      };
-      const timeout = setTimeout(() => { img.src = ""; finish(false); }, 9000);
-      img.onload = () => {
-        if (typeof img.decode === "function") img.decode().then(() => finish(true), () => finish(true));
-        else finish(true);
-      };
-      img.onerror = () => finish(false);
-      img.src = CFG.frames.hiPath + name(idx);
-    }
-  };
-
   return {
     N,
     preloadLo,
     startLo: () => {
-      if (loStreaming) return;
-      loStreaming = true;
-      pumpLo();
+      loRing.start();
+      if (hiRing) setTimeout(() => hiRing.start(), 1200);
     },
-    startHi: () => {
-      if (!hiEnabled || hiStarted) return;
-      setTimeout(() => { hiStarted = true; pumpHi(); }, 5500);
-    },
-    setHiCalm: (next) => {
-      if (hiCalm === next) return;
-      hiCalm = next;
-      if (hiCalm) pumpHi();
-    },
+    startHi: () => { if (hiRing) hiRing.start(); },
+    setHiCalm: () => {},                  // uniform quality: hi streams continuously
     setDemandActive: (next) => {
-      demandActive = next;
-      if (demandActive) {
-        pumpLo();
-        pumpHi();
-      } else {
-        hiCalm = false;
-        evictLo();
-        evictHi();
-      }
+      loRing.setRetained(next);
+      if (hiRing) hiRing.setRetained(next);
     },
     setPlayhead: (i) => {
-      const next = clamp(Math.round(i), 0, N - 1);
-      if (next === current) return;
-      current = next;
-      pumpLo();
-      evictLo();
-      evictHi();
-      pumpHi();
+      const c = clamp(Math.round(i), 0, N - 1);
+      loRing.setCenter(c);
+      if (hiRing) hiRing.setCenter(c);
     },
-    /* best available image for frame i; prefer hi only when settled */
-    get: (i, settled) => {
-      if (settled && hiState[i] === 2 && hi[i]) return hi[i];
-      if (loState[i] === 2 && lo[i]) return lo[i];
-      for (let d = 1; d < N; d++) {
-        const a = i + d, b = i - d;
-        if (a < N && loState[a] === 2 && lo[a]) return lo[a];
-        if (b >= 0 && loState[b] === 2 && lo[b]) return lo[b];
+    /* sharpest ready frame — exact hi, near hi, exact lo, then nearest anything */
+    get: (i) => {
+      if (hiRing) {
+        const h = hiRing.ready(i) || hiRing.nearest(i, 2);
+        if (h) return h;
       }
-      return null;
+      const l = loRing.ready(i);
+      if (l) return l;
+      const ln = loRing.nearest(i);
+      if (ln) return ln;
+      return hiRing ? hiRing.nearest(i) : null;
     },
-    prime: (i, img) => {
-      if (i < 0 || i >= N || !img || !img.naturalWidth) return;
-      img._scrubKey = `lo-${i}`;
-      lo[i] = img;
-      loState[i] = 2;
-    },
+    prime: (i, im) => loRing.prime(i, im),
   };
 })();
 
@@ -522,12 +484,12 @@ const scrub = (() => {
   const IVORY = () => getComputedStyle(document.documentElement).getPropertyValue("--ivory").trim() || "#F4EBDB";
   let ivory = "#F4EBDB";
   const draw = (img) => {
-    if (!img || !img.naturalWidth) return false;
+    if (!imgW(img)) return false;
     if (canvas.width < 2 || canvas.height < 2) { resize(); if (canvas.width < 2) return; }
     const cw = canvas.width, ch = canvas.height;
     // The world floats above the page; the CSS vignette feathers its edges.
-    const s = Math.min(cw / img.naturalWidth, ch / img.naturalHeight) * 0.97;
-    const w = Math.round(img.naturalWidth * s), h = Math.round(img.naturalHeight * s);
+    const s = Math.min(cw / imgW(img), ch / imgH(img)) * 0.97;
+    const w = Math.round(imgW(img) * s), h = Math.round(imgH(img) * s);
     const py = (ch - h) * 0.42;                       // sit slightly above centre; copy breathes below
     const x = Math.round((cw - w) / 2);
     const y = Math.round(py);
@@ -903,17 +865,17 @@ const sanctum = (() => {
   $("#sanctum-veil-text").textContent = S.veilText;
   const canvas = $("#sanctum-canvas"), c = canvas.getContext("2d", { alpha: false });
   const progressEl = $("#sanctum-progress"), veilText = $("#sanctum-veil-text");
-  const imgs = new Array(S.count);
-  const imgState = new Uint8Array(S.count);
+  const ring = createBitmapRing({
+    count: S.count,
+    url: (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext,
+    keyPrefix: "sanctum-",
+    ahead: RING_TIER === "full" ? 24 : RING_TIER === "mid" ? 16 : 10,
+    behind: RING_TIER === "full" ? 9 : 6,
+    limit: RING_TIER === "lite" ? 2 : 4,
+  });
   const gateCount = Math.min(SAVE_DATA ? 6 : IS_TOUCH ? 10 : 16, S.count);
-  const loadLimit = SAVE_DATA ? 2 : IS_TOUCH ? 3 : 5;
-  const ahead = SAVE_DATA ? 8 : IS_TOUCH ? 14 : 20;
-  const behind = IS_TOUCH ? 6 : 10;
-  const keepAhead = ahead + 4;
-  const keepBehind = behind + 4;
-  const name = (i) => S.path + S.prefix + String(i + 1).padStart(3, "0") + S.ext;
   let state = "locked";            // locked → loading → unlocked
-  let inView = false, cur = 0, target = 0, drawn = "", activeLoads = 0;
+  let inView = false, cur = 0, target = 0, drawn = "";
   let scrollStart = 0, scrollDistance = 1, loadCenter = -1, progressFrame = -1;
 
   const measureScrollRange = (rect = null) => {
@@ -922,80 +884,14 @@ const sanctum = (() => {
     scrollDistance = Math.max(r.height - vhPx * 100, 1);
   };
 
-  const evict = () => {
-    if (state !== "unlocked") return;
-    const center = Math.round(target);
-    const retainAhead = inView ? keepAhead : 3;
-    const retainBehind = inView ? keepBehind : 3;
-    for (let i = 0; i < S.count; i++) {
-      if (imgState[i] === 2 && (i < center - retainBehind || i > center + retainAhead)) {
-        imgs[i].onload = imgs[i].onerror = null;
-        imgs[i].src = "";
-        imgs[i] = null;
-        imgState[i] = 0;
-      }
-    }
-  };
-
-  const loadFrame = (i, done) => {
-    if (i < 0 || i >= S.count || imgState[i] !== 0) return false;
-    imgState[i] = 1;
-    activeLoads++;
-    const img = new Image();
-    img.decoding = "async";
-    img._scrubKey = `sanctum-${i}`;
-    if (state === "unlocked") {
-      const distance = Math.abs(i - Math.round(target));
-      img.fetchPriority = distance <= 2 ? "high" : distance <= ahead ? "auto" : "low";
-    }
-    imgs[i] = img;
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      imgState[i] = img.naturalWidth ? 2 : 3;
-      activeLoads--;
-      evict();
-      if (done) done();
-    };
-    const timeout = setTimeout(() => { img.src = ""; settle(); }, 9000);
-    img.onload = () => {
-      if (typeof img.decode === "function") img.decode().then(settle, settle);
-      else settle();
-    };
-    img.onerror = settle;
-    img.src = name(i);
-    return true;
-  };
-
-  const pumpWindow = () => {
-    if (state !== "unlocked" || !inView) return;
-    const center = clamp(Math.round(target), 0, S.count - 1);
-    while (activeLoads < loadLimit) {
-      let idx = -1;
-      for (let d = 0; d <= ahead; d++) {
-        const i = center + d;
-        if (i < S.count && imgState[i] === 0) { idx = i; break; }
-      }
-      if (idx < 0) {
-        for (let d = 1; d <= behind; d++) {
-          const i = center - d;
-          if (i >= 0 && imgState[i] === 0) { idx = i; break; }
-        }
-      }
-      if (idx < 0 || !loadFrame(idx, pumpWindow)) return;
-    }
-  };
-
   new IntersectionObserver((es) => {
     es.forEach((e) => {
       inView = e.isIntersecting;
       if (e.isIntersecting) {
         measureScrollRange(e.boundingClientRect);
         if (state === "locked") load();   // everyone gets the moment
-        else if (state === "unlocked") { loadCenter = -1; pumpWindow(); }
-      } else if (state === "unlocked") evict();
+        else if (state === "unlocked") ring.setRetained(true);
+      } else if (state === "unlocked") ring.setRetained(false);
     });
   }, { rootMargin: SAVE_DATA ? "240px 0px" : IS_TOUCH ? "520px 0px" : "700px 0px" }).observe(sec);
 
@@ -1004,11 +900,13 @@ const sanctum = (() => {
     sec.classList.add("loading");
     veilText.textContent = "Unfolding…";
     progressEl.classList.remove("hidden");
-    let done = 0, next = 0;
+    let done = 0, next = 0, inFlight = 0;
     const pump = () => {
-      while (activeLoads < loadLimit && next < gateCount) {
+      while (inFlight < 4 && next < gateCount) {
         const i = next++;
-        loadFrame(i, () => {
+        inFlight++;
+        ring.load(i, () => {
+          inFlight--;
           done++;
           progressEl.textContent = Math.round(done / gateCount * 100) + "%";
           if (done === gateCount) unlock();
@@ -1033,24 +931,14 @@ const sanctum = (() => {
     drawn = "";
   };
 
-  const pickFrame = (i) => {
-    let img = imgState[i] === 2 ? imgs[i] : null;
-    if (!img) {
-      for (let d = 1; d < S.count; d++) {
-        const a = i + d, b = i - d;
-        if (a < S.count && imgState[a] === 2) { img = imgs[a]; break; }
-        if (b >= 0 && imgState[b] === 2) { img = imgs[b]; break; }
-      }
-    }
-    return img;
-  };
+  const pickFrame = (i) => ring.ready(i) || ring.nearest(i);
 
   const draw = (img) => {
-    if (!img || !img.naturalWidth) return false;
+    if (!imgW(img)) return false;
     if (canvas.width < 2) resize();
     const cw = canvas.width, ch = canvas.height;
-    const s = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
-    const w = img.naturalWidth * s, h = img.naturalHeight * s;
+    const s = Math.max(cw / imgW(img), ch / imgH(img));
+    const w = imgW(img) * s, h = imgH(img) * s;
     c.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
     return true;
   };
@@ -1058,10 +946,10 @@ const sanctum = (() => {
   const unlock = () => {
     state = "unlocked";
     resize();
+    ring.start();
+    ring.setRetained(inView);
     const first = pickFrame(0);
     if (draw(first)) drawn = first._scrubKey;
-    if (inView) pumpWindow();
-    else evict();
     sec.classList.remove("loading");
     sec.classList.add("unlocked");
     audio.bell(560, 0.5, 3.4);
@@ -1083,8 +971,7 @@ const sanctum = (() => {
     const nextLoadCenter = Math.round(target);
     if (nextLoadCenter !== loadCenter) {
       loadCenter = nextLoadCenter;
-      pumpWindow();
-      evict();
+      ring.setCenter(nextLoadCenter);
     }
     const img = pickFrame(i);
     const key = img?._scrubKey || "";
