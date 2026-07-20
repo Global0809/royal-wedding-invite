@@ -1053,14 +1053,44 @@ const sanctum = (() => {
   };
 })();
 
-/* ═══════════════ DECOR REVEAL — no per-frame parallax ════ */
-(() => {
+/* ═══════════════ DECOR PARALLAX — cached offsets, compositor-only ═
+   Depth cutouts drift with scroll. Offsets are measured once (and on
+   resize), so the per-frame cost is pure arithmetic + a transform —
+   no layout reads, nothing the compositor can't handle. */
+const decor = (() => {
+  const els = [...document.querySelectorAll(".decor[data-depth]")].map((el) => ({
+    el, depth: parseFloat(el.dataset.depth) || 0, top: 0, h: 0, on: false, y: 0,
+  }));
   const io = new IntersectionObserver((es) => {
     es.forEach((e) => {
       e.target.classList.toggle("shown", e.isIntersecting);
+      const rec = els.find((r) => r.el === e.target);
+      if (rec) rec.on = e.isIntersecting;
     });
   }, { threshold: 0.04 });
   document.querySelectorAll(".decor, .foot-diya").forEach((el) => io.observe(el));
+
+  const measure = () => {
+    els.forEach((r) => {
+      const rect = r.el.getBoundingClientRect();
+      r.top = rect.top + scrollY - r.y;      // subtract our own applied offset
+      r.h = rect.height;
+    });
+  };
+  addEventListener("load", () => setTimeout(measure, 60), { once: true });
+
+  const tick = () => {
+    if (!els.length) return;
+    const mid = scrollY + innerHeight / 2;
+    els.forEach((r) => {
+      if (!r.on || !r.h) return;
+      const y = (r.top + r.h / 2 - mid) * -r.depth;
+      if (Math.abs(y - r.y) < 0.4) return;
+      r.y = y;
+      r.el.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+    });
+  };
+  return { tick, measure };
 })();
 
 /* ═══════════════ VENUE + RSVP ════════════════════════════ */
@@ -1429,6 +1459,7 @@ const refreshScrollRange = () => { pageScrollRange = Math.max(doc.scrollHeight -
 const refreshPageMetrics = () => {
   refreshScrollRange();
   sanctum.resize();
+  decor.measure();
 };
 if ("ResizeObserver" in window) new ResizeObserver(refreshPageMetrics).observe(document.body);
 addEventListener("load", refreshPageMetrics, { once: true });
@@ -1442,6 +1473,7 @@ const mainLoop = (t) => {
   petals.step(dt);
   sanctum.tick(dt);
   films.tick(dt);
+  decor.tick();
   finale.tick();
   // golden scroll thread
   const sp = clamp(scrollY / pageScrollRange, 0, 1);
