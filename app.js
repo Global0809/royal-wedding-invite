@@ -741,6 +741,14 @@ const petals = (() => {
   const wrap = $("#scratch-wrap");
   let painted = false, cleared = false, strokes = 0, foilW = 0, foilH = 0;
 
+  /* Run the decorative border only while the card is near the viewport. */
+  if (!REDUCED && "IntersectionObserver" in window) {
+    const borderObserver = new IntersectionObserver(([entry]) => {
+      wrap.classList.toggle("scratch-border-active", entry.isIntersecting);
+    }, { rootMargin: "14% 0px", threshold: 0.04 });
+    borderObserver.observe(wrap);
+  } else if (!REDUCED) wrap.classList.add("scratch-border-active");
+
   const paintFoil = () => {
     foilW = wrap.clientWidth; foilH = wrap.clientHeight;
     const w = canvas.width = foilW * DPR;
